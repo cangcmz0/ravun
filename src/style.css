@@ -2600,6 +2600,7 @@ body:before{
 }
 .searchItem{
   display:grid;
+  grid-template-columns:auto 1fr auto;
   align-items:center;
   gap:16px;
   text-align:left;
@@ -6786,7 +6787,7 @@ img[class]{
     min-height:min(118vw,560px) !important;
     padding:12px !important;
   }
-  .collectionFull .photoWrap,.collectionFull .productInfo h3{
+  .collectionFull .productInfo h3{
     font-size:27px !important;
   }
   .gridProducts.homeProductsClean{
@@ -8187,10 +8188,6 @@ body{
   .photoWrap{
     min-height:300px !important;
   }
-  .collectionFull .photoWrap{
-    width:78px !important;
-    height:78px !important;
-  }
   body{
     padding-bottom:86px;
   }
@@ -8410,6 +8407,13 @@ body{
     flex-direction:column;
     gap:12px;
     align-items:flex-start;
+  }
+}
+/* ── RESPONSIVE 400px — koleksiyon galerisi tek sütun ── */
+@media (max-width:400px) {
+  .galleryCard{
+    max-width:100%;
+    flex-basis:100%;
   }
 }
 /* ── Karartma katmanı ── */
