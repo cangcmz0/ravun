@@ -1,0 +1,115 @@
+:root {
+  --radius: 0.75rem;
+
+  /* Base surfaces — Ravun sitesindeki sıcak krem palet */
+  --background: #EFE7DA;
+  --foreground: #2B2115;
+  --card: #FBF6EC;
+  --card-foreground: #2B2115;
+  --popover: #FBF6EC;
+  --popover-foreground: #2B2115;
+
+  /* Brand — sitedeki ana CTA rengi (order-btn) */
+  --primary: #D7836F;
+  --primary-foreground: #FFFFFF;
+  --secondary: #EFE7DA;
+  --secondary-foreground: #2B2115;
+  --muted: #E4DACA;
+  --muted-foreground: #8B765F;
+  --accent: #E2F1EA;
+  --accent-foreground: #1F5C46;
+  --destructive: #BE4A3C;
+
+  --border: #DED3C3;
+  --input: #DED3C3;
+  --ring: #D7836F;
+
+  /* Charts — marka paletinin varyasyonları */
+  --chart-1: #D7836F;
+  --chart-2: #2C8262;
+  --chart-3: #69CFB0;
+  --chart-4: #AB7A55;
+  --chart-5: #6F7C52;
+
+  /* Sidebar - intentionally always dark for brand contrast, independent of light/dark mode */
+  --sidebar: #291D11;
+  --sidebar-foreground: #EDE4C7;
+  --sidebar-primary: #D7836F;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #3D2C1B;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #3D2C1B;
+  --sidebar-ring: #D7836F;
+}
+
+.dark {
+  --background: #1C140C;
+  --foreground: #EDE4C7;
+  --card: #291D11;
+  --card-foreground: #EDE4C7;
+  --popover: #291D11;
+  --popover-foreground: #EDE4C7;
+
+  --primary: #E2947F;
+  --primary-foreground: #2B1B10;
+  --secondary: #3D2C1B;
+  --secondary-foreground: #EDE4C7;
+  --muted: #3D2C1B;
+  --muted-foreground: #C2AE94;
+  --accent: #2F4438;
+  --accent-foreground: #9FE0C6;
+  --destructive: #E5776A;
+
+  --border: color-mix(in oklab, #EDE4C7 12%, transparent);
+  --input: color-mix(in oklab, #EDE4C7 16%, transparent);
+  --ring: #D7836F;
+
+  --chart-1: #E2947F;
+  --chart-2: #4FA383;
+  --chart-3: #69CFB0;
+  --chart-4: #C79868;
+  --chart-5: #8B9971;
+
+  /* Sidebar stays the same dark brown in both modes on purpose */
+}
+
+@theme inline {
+  --font-inter: 'Inter', 'sans-serif';
+  --font-manrope: 'Manrope', 'sans-serif';
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}

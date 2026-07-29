@@ -1,0 +1,404 @@
+[
+  {
+    "id": 1,
+    "tag": "TEK PARÇA",
+    "category": "Duvar Rafı",
+    "title": "Yeşim Raf",
+    "desc": "Ceviz damarından zümrüt epoksiye uzanan tek parça duvar rafı.",
+    "longDesc": "Türk cevizinin koyu, sıcak damarları boyunca akan zümrüt epoksi; hem yapısal hem estetik bir bütün oluşturur.",
+    "price": 4500,
+    "delivery": "4–5 hafta",
+    "image": "/assets/products_hero-1.webp",
+    "gallery": [
+      "/assets/products_hero-1.webp",
+      "/assets/products_hero-3.webp",
+      "/assets/products_hero-1.webp"
+    ],
+    "materials": [
+      "Türk Cevizi",
+      "Zümrüt Epoksi",
+      "Doğal Yağ Bitişi"
+    ],
+    "dimensions": "80 × 22 × 4 cm",
+    "weight": "3.8 kg",
+    "colors": [
+      "#1a6b4a",
+      "#8B4513",
+      "#2a2a2a"
+    ],
+    "colorNames": [
+      "Zümrüt",
+      "Ceviz",
+      "Siyah"
+    ],
+    "sizes": [
+      "60 cm",
+      "80 cm",
+      "100 cm",
+      "Özel Ölçü"
+    ],
+    "stock": "Sipariş üzerine",
+    "featured": true,
+    "visible": true,
+    "certificateNo": "RVN-001",
+    "craftTime": "18 saat el işçiliği",
+    "finish": "Doğal yağ + balmumu",
+    "repeatable": "Aynısı üretilemez, benzeri hazırlanabilir",
+    "productionMood": "Salon ve niş alanlar için sakin odak parçası",
+    "story": "Yeşim Raf, ceviz damarının doğal kıvrımını bozmadan zümrüt epoksiyle tamamlanan tekil bir duvar parçası. Her akış çizgisi ahşabın bıraktığı boşluğa göre elde şekillenir.",
+    "detailPoints": [
+      {
+        "x": 32,
+        "y": 44,
+        "title": "Ceviz damar hattı",
+        "text": "Doğal damar yönü korunur; her parçada desen farklıdır."
+      },
+      {
+        "x": 58,
+        "y": 54,
+        "title": "Zümrüt epoksi geçişi",
+        "text": "Pigment yoğunluğu katmanlı dökümle dengelenir."
+      },
+      {
+        "x": 76,
+        "y": 28,
+        "title": "Gizli montaj hissi",
+        "text": "Duvara daha temiz ve sakin oturması hedeflenir."
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "tag": "SINIRLI ÜRETİM",
+    "category": "Bıçak Standı",
+    "title": "Petek Bıçak Standı",
+    "desc": "Bal peteği geometrisi, açık ceviz dokusu ve sedef epoksi birleşimi.",
+    "longDesc": "El yapımı altıgen geometri oymaları cevizin açık dokusunu ön plana çıkarır.",
+    "price": 3200,
+    "delivery": "3 hafta",
+    "image": "/assets/product-atlas.webp",
+    "gallery": [
+      "/assets/product-atlas.webp",
+      "/assets/product-atlas.webp",
+      "/assets/hero-1.webp"
+    ],
+    "materials": [
+      "Açık Ceviz",
+      "Sedef Epoksi",
+      "Balmumu Bitişi"
+    ],
+    "dimensions": "32 × 12 × 24 cm",
+    "weight": "1.2 kg",
+    "colors": [
+      "#d4c5a9",
+      "#1a6b4a",
+      "#4a3728"
+    ],
+    "colorNames": [
+      "Sedef",
+      "Yeşil",
+      "Koyu Ceviz"
+    ],
+    "sizes": [
+      "6 Bıçak",
+      "8 Bıçak",
+      "12 Bıçak"
+    ],
+    "stock": "Sipariş üzerine",
+    "featured": true,
+    "visible": true,
+    "certificateNo": "RVN-002",
+    "craftTime": "12 saat kesim + finisaj",
+    "finish": "Balmumu bitiş",
+    "repeatable": "Geometri korunur, ahşap deseni değişir",
+    "productionMood": "Mutfakta heykelsi ve kullanışlı düzen",
+    "story": "Petek Bıçak Standı, bal peteği ritmini ahşap yüzeyde kullanarak mutfakta hem güvenli hem sergilenebilir bir parça üretmek için tasarlandı.",
+    "detailPoints": [
+      {
+        "x": 45,
+        "y": 38,
+        "title": "Altıgen petek düzeni",
+        "text": "Bıçakların görsel ritmini bozmadan taşıyan geometri."
+      },
+      {
+        "x": 68,
+        "y": 60,
+        "title": "Sedef epoksi",
+        "text": "Açık tonlu reçine, ceviz dokusunu yumuşatır."
+      },
+      {
+        "x": 24,
+        "y": 70,
+        "title": "Dengeli taban",
+        "text": "Tezgâhta daha sağlam durması için kütle dengesi korunur."
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "tag": "ATÖLYE SERİSİ",
+    "category": "Masaüstü",
+    "title": "Atlas Kalemlik",
+    "desc": "Koyu reçine ve sıcak ceviz dokusuyla masa üstü imza parçası.",
+    "longDesc": "Masanızın üzerinde hem kalemlik hem dekoratif obje olarak duran Atlas.",
+    "price": 850,
+    "delivery": "2 hafta",
+    "image": "/assets/product-atlas.webp",
+    "gallery": [
+      "/assets/product-atlas.webp",
+      "/assets/product-atlas.webp",
+      "/assets/products_hero-3.webp"
+    ],
+    "materials": [
+      "Türk Cevizi",
+      "Koyu Reçine",
+      "Yağ Bitişi"
+    ],
+    "dimensions": "14 × 8 × 12 cm",
+    "weight": "0.6 kg",
+    "colors": [
+      "#2a2a2a",
+      "#8B4513",
+      "#1a6b4a"
+    ],
+    "colorNames": [
+      "Obsidiyen",
+      "Ceviz",
+      "Zümrüt"
+    ],
+    "sizes": [
+      "Standart",
+      "Geniş"
+    ],
+    "stock": "3 adet mevcut",
+    "featured": false,
+    "visible": true,
+    "certificateNo": "RVN-003",
+    "craftTime": "6 saat el finisajı",
+    "finish": "Mat yağ bitiş",
+    "repeatable": "Küçük seri üretilebilir",
+    "productionMood": "Masa üstünde sıcak ve sade imza",
+    "story": "Atlas Kalemlik, küçük bir masa objesinin bile karakter taşıyabileceği fikriyle tasarlandı. Koyu reçine, ceviz sıcaklığıyla dengelenir.",
+    "detailPoints": [
+      {
+        "x": 38,
+        "y": 42,
+        "title": "Kompakt gövde",
+        "text": "Masa üzerinde yer kaplamadan dikkat çeker."
+      },
+      {
+        "x": 62,
+        "y": 48,
+        "title": "Koyu reçine çizgisi",
+        "text": "Ahşap dokuyu daha derin gösteren kontrast."
+      },
+      {
+        "x": 50,
+        "y": 72,
+        "title": "Elde yumuşatılmış kenar",
+        "text": "Dokunma hissi için keskinlik azaltılır."
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "tag": "İMZA TON",
+    "category": "Sunum Tahtası",
+    "title": "Zümrüt Servis",
+    "desc": "Doğal damar, parlak zümrüt akış ve elde cilalanmış yüzey.",
+    "longDesc": "Misafirlerinizin masada ilk fark edeceği şey bu olacak.",
+    "price": 1850,
+    "delivery": "2 hafta",
+    "image": "/assets/products_hero-1.webp",
+    "gallery": [
+      "/assets/products_hero-1.webp",
+      "/assets/products_hero-2.webp",
+      "/assets/cta-banner.webp"
+    ],
+    "materials": [
+      "Iroko Ahşabı",
+      "Zümrüt Epoksi",
+      "Gıda Güvenli Yağ"
+    ],
+    "dimensions": "45 × 25 × 2.5 cm",
+    "weight": "0.9 kg",
+    "colors": [
+      "#1a6b4a",
+      "#4a7c59",
+      "#073F32"
+    ],
+    "colorNames": [
+      "Açık Zümrüt",
+      "Orman",
+      "Koyu Zümrüt"
+    ],
+    "sizes": [
+      "Küçük 35cm",
+      "Standart 45cm",
+      "Büyük 60cm"
+    ],
+    "stock": "Sipariş üzerine",
+    "featured": false,
+    "visible": true,
+    "certificateNo": "RVN-004",
+    "craftTime": "10 saat yüzey hazırlığı",
+    "finish": "Gıda güvenli yağ",
+    "repeatable": "Ton benzer, damar farklı olur",
+    "productionMood": "Sofrada premium sunum dili",
+    "story": "Zümrüt Servis, masa üzerinde doğal damar ile parlak epoksi akışını birlikte göstermek için hazırlanır. Her servis parçası elde cilalanır.",
+    "detailPoints": [
+      {
+        "x": 30,
+        "y": 50,
+        "title": "Gıda güvenli yağ",
+        "text": "Servis kullanımına uygun koruyucu yüzey."
+      },
+      {
+        "x": 56,
+        "y": 44,
+        "title": "Epoksi akışı",
+        "text": "Damar boşluğuna göre doğal bir nehir etkisi."
+      },
+      {
+        "x": 78,
+        "y": 62,
+        "title": "Elde cilalanmış kenar",
+        "text": "Kenarlar yumuşak ve kullanıma hazır bitirilir."
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "tag": "MASA SETİ",
+    "category": "Masaüstü",
+    "title": "Siyah Masaüstü Set",
+    "desc": "Siyah reçine, ceviz burl dokusu ve altın detaylı ofis seti.",
+    "longDesc": "Ofis masanızı yeniden tasarlamak için geliştirdiğimiz bu set.",
+    "price": 2650,
+    "delivery": "10 gün",
+    "image": "/assets/hero-1.webp",
+    "gallery": [
+      "/assets/hero-1.webp",
+      "/assets/product-atlas.webp",
+      "/assets/products_hero-3.webp"
+    ],
+    "materials": [
+      "Ceviz Burl",
+      "Siyah Reçine",
+      "Altın Aksesuar"
+    ],
+    "dimensions": "Set: 3 Parça",
+    "weight": "2.1 kg",
+    "colors": [
+      "#1a1a1a",
+      "#8B4513",
+      "#C0972A"
+    ],
+    "colorNames": [
+      "Siyah",
+      "Ceviz",
+      "Altın"
+    ],
+    "sizes": [
+      "2'li Set",
+      "3'lü Set",
+      "5'li Set"
+    ],
+    "stock": "1 set hazır",
+    "featured": false,
+    "visible": true,
+    "certificateNo": "RVN-005",
+    "craftTime": "14 saat set uyumu",
+    "finish": "Saten mat koruma",
+    "repeatable": "Set dili korunur, desen değişir",
+    "productionMood": "Ofis ve çalışma masası için güçlü karakter",
+    "story": "Siyah Masaüstü Set, ofis objelerini daha bütünlüklü ve premium göstermek için ceviz burl dokusu ile siyah reçineyi eşleştirir.",
+    "detailPoints": [
+      {
+        "x": 42,
+        "y": 38,
+        "title": "Ceviz burl dokusu",
+        "text": "Yoğun damar hareketi setin imza alanıdır."
+      },
+      {
+        "x": 64,
+        "y": 52,
+        "title": "Siyah reçine kontrastı",
+        "text": "Masada daha kararlı ve modern bir ton verir."
+      },
+      {
+        "x": 78,
+        "y": 30,
+        "title": "Altın detay uyumu",
+        "text": "Aksesuar hissini güçlendiren sıcak vurgu."
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "tag": "MARKA DOKUSU",
+    "category": "Paketleme",
+    "title": "Ravun Etiket Seti",
+    "desc": "Keten, mantar ve deri tag ile tamamlanan premium paketleme dili.",
+    "longDesc": "Her Ravun parçası bu etiketlerle teslim edilir.",
+    "price": 750,
+    "delivery": "Örnek set",
+    "image": "/assets/tags-cork.webp",
+    "gallery": [
+      "/assets/tags-cork.webp",
+      "/assets/tags-canvas.webp",
+      "/assets/brand-tags-canvas.webp"
+    ],
+    "materials": [
+      "Keten Kumaş",
+      "Mantar",
+      "Gerçek Deri"
+    ],
+    "dimensions": "Çeşitli",
+    "weight": "0.1 kg",
+    "colors": [
+      "#c8b89a",
+      "#2a2a2a",
+      "#8B4513"
+    ],
+    "colorNames": [
+      "Krem",
+      "Siyah",
+      "Deri"
+    ],
+    "sizes": [
+      "5'li Örnek",
+      "20'li Set",
+      "50'li Set"
+    ],
+    "stock": "Stokta mevcut",
+    "featured": false,
+    "visible": true,
+    "certificateNo": "RVN-006",
+    "craftTime": "Örnek set hazırlığı",
+    "finish": "Keten + mantar + deri",
+    "repeatable": "Seri hazırlanabilir",
+    "productionMood": "Marka paketlemesi ve hediye sunumu",
+    "story": "Ravun Etiket Seti, ürünün teslim anındaki ilk temasını güçlendirmek için keten, mantar ve deri dokularını birlikte kullanır.",
+    "detailPoints": [
+      {
+        "x": 35,
+        "y": 42,
+        "title": "Keten marka dili",
+        "text": "Yumuşak, doğal ve butik dokunuş."
+      },
+      {
+        "x": 58,
+        "y": 50,
+        "title": "Mantar yüzey",
+        "text": "Hafif, sıcak ve elde tutulur etiket hissi."
+      },
+      {
+        "x": 76,
+        "y": 62,
+        "title": "Deri tag",
+        "text": "Kutuda premium tamamlayıcı detay."
+      }
+    ]
+  }
+]
