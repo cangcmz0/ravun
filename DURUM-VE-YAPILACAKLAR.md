@@ -2,9 +2,28 @@
 
 Bu proje, sitenin (`ravun-main`) eski gömülü admin panelini kaldırıp yeni
 temayı (`shadcn-admin`) `/admin` altında entegre etme işinin devamında.
-**Giriş noktası, Panel (Dashboard), Ürünler, Siparişler ve Yorumlar
-sayfaları çalışıyor ve gerçek veriyle besleniyor.**
-Sadece **Site Ayarları** hâlâ şablon (bilerek — aşağıda tam plan var).
+**Giriş noktası, Panel (Dashboard), Ürünler, Siparişler, Yorumlar VE Site
+Ayarları sayfalarının hepsi çalışıyor ve gerçek veriyle besleniyor.**
+
+## ✅ Bu oturumda yapılan kontrol (otomatik doğrulama)
+Aşağıdaki "Site Ayarları" planı **zaten koddaydı** (önceki bir oturumda
+tamamlanmış ama bu dosya güncellenmemişti) — `src/admin/features/settings/index.tsx`
+tek dosyalık, 6 sekmeli (Hero / Koleksiyon & Atölye / Kategoriler /
+Paketleme & Hediye / Instagram & Footer / Görünürlük) formun kendisi,
+`src/admin/routes/_authenticated/settings.tsx` düz route dosyası olarak
+duruyor, eski `profile/account/appearance/notifications/display` klasörleri
+ve `sidebar-nav.tsx`/`content-section.tsx` zaten yoktu. Bu oturumda:
+- `npm install` ✅ temiz.
+- `npx vite build` ✅ hatasız (Site Ayarları dahil tüm sayfalar build'e giriyor).
+- Tam `npm run build` (vite build + `scripts/prerender.mjs`) ✅ hatasız,
+  3 sabit sayfa + 6 ürün sayfası önizleme üretti.
+- `npx tsc --noEmit` çalıştırıldı — **Site Ayarları/admin veri katmanıyla
+  ilgisi olmayan**, önceki şablondan kalma ~15 tip hatası var
+  (`nav-group.tsx`, `sign-out-dialog.tsx`, `input-otp.tsx`, birkaç
+  `*.test.ts(x)` dosyası — `vitest`/`axios`/`input-otp` paketleri kurulu
+  değil). `vite build` bunları ayrıca tip kontrolünden geçirmediği için
+  mevcut derlemeyi etkilemiyorlar; temiz bir proje isteniyorsa ayrı bir
+  işte ele alınabilir.
 
 ## ✅ Tamamlanan (önceki oturumlardan)
 1. Eski admin panel siteden temizce kaldırıldı (`src/main.jsx`).
@@ -56,8 +75,8 @@ Sadece **Site Ayarları** hâlâ şablon (bilerek — aşağıda tam plan var).
   etkilemiyor — ama bir sonraki oturum tam `npm run build`'i de
   çalıştırıp doğrulamalı.)
 
-## ❌ Henüz yapılmadı — Site Ayarları (tam plan aşağıda, sıfırdan
-araştırmaya gerek yok)
+## ✅ Tamamlandı — Site Ayarları (aşağıdaki plan birebir uygulanmış hâliyle
+kodda duruyor, referans olarak bırakıldı)
 
 Amaç: mevcut genel şablon (Profile/Account/Appearance/Notifications/
 Display sekmeleri, `src/admin/features/settings/{profile,account,
