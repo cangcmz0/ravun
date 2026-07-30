@@ -135,9 +135,9 @@ const CATEGORY_DETAILS = {
 };
 const DEFAULT_CATEGORY_SETTINGS = Object.fromEntries(Object.entries(CATEGORY_DETAILS).map(([key, value]) => [key, {...value}]));
 const slides = [
-  { tag:'SİPARİŞ ÜZERİNE', line1:'Atölyeden', line2:'masanıza.', image:`${A}products_hero-1.webp` },
-  { tag:'RAVUN ATÖLYE', line1:'Sanat olarak', line2:'işlev.', image:`${A}products_hero-3.webp` },
-  { tag:'SINIRLI ÜRETİM', line1:'Her parça,', line2:'tek.', image:`${A}products_hero-2.webp` },
+  { tag:'SİPARİŞ ÜZERİNE', line1:'Atölyeden', line2:'masanıza.', image:`${A}products_hero-1.webp`, pos:'21% center' },
+  { tag:'RAVUN ATÖLYE', line1:'Sanat olarak', line2:'işlev.', image:`${A}products_hero-3.webp`, pos:'73% center' },
+  { tag:'SINIRLI ÜRETİM', line1:'Her parça,', line2:'tek.', image:`${A}products_hero-2.webp`, pos:'56% center' },
 ];
 const DEFAULT_SITE_SETTINGS = {
   styleVersion: 'ravun-v107-clean-commerce',
@@ -2274,7 +2274,7 @@ function Hero({go, settings}){
   const heroSrc = slides[active]?.image || slides[0].image;
   return (
     <section id="hero" className="hero" style={{'--hero-img': `url(${heroSrc})`}}>
-      {slides.map((slide,i)=><img key={slide.image} src={slide.image} alt="Ravun atölye ürünü" className={`heroImg ${i===active?'active':''}`} loading={i===active?'eager':'lazy'} fetchpriority={i===active?'high':'low'}/>)}
+      {slides.map((slide,i)=><img key={slide.image} src={slide.image} alt="Ravun atölye ürünü" className={`heroImg ${i===active?'active':''}`} style={{objectPosition: slide.pos || 'center center'}} loading={i===active?'eager':'lazy'} fetchpriority={i===active?'high':'low'}/>)}
       <div className="heroOverlay"/>
       <div key={active} className="heroContent heroEnter">
         <p className="kicker">· {s.tag}</p>
