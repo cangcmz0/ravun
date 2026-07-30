@@ -10641,6 +10641,9 @@ body.modal-open{
   .hero{
     min-height:650px;
   }
+  .heroImg{
+    object-position:center 72% !important;
+  }
   .sliderHint button:not(.active) span{
     width:18px;
   }
