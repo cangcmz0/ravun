@@ -64,7 +64,11 @@ export function Products() {
 
   const persist = (next: any[]) => {
     setProducts(next)
-    saveProducts(next)
+    const ok = saveProducts(next)
+    if (!ok) {
+      toast.error('Kaydedilemedi: depolama alanı doldu. Bazı ürünlerdeki görselleri azaltıp tekrar deneyin.')
+    }
+    return ok
   }
 
   const sorted = useMemo(
@@ -94,14 +98,13 @@ export function Products() {
 
   const handleSave = (payload: any) => {
     const isEdit = products.some((p) => p.id === payload.id)
-    if (isEdit) {
-      persist(products.map((p) => (p.id === payload.id ? payload : p)))
-      toast.success(`${payload.title} güncellendi`)
-    } else {
-      persist([...products, payload])
-      toast.success(`${payload.title} eklendi`)
+    const next = isEdit ? products.map((p) => (p.id === payload.id ? payload : p)) : [...products, payload]
+    const ok = persist(next)
+    if (ok) {
+      toast.success(isEdit ? `${payload.title} güncellendi` : `${payload.title} eklendi`)
+      setEditing(null)
     }
-    setEditing(null)
+    return ok
   }
 
   const handleDelete = () => {
@@ -257,6 +260,7 @@ export function Products() {
         nextId={nextId}
         nextSortOrder={nextSortOrder}
         onSave={handleSave}
+        allProducts={products}
       />
 
       <ConfirmDialog

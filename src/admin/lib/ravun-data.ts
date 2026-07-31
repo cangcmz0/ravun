@@ -130,6 +130,12 @@ export function writeStored(key: string, value: any) {
     return true
   } catch { return false }
 }
+export const STORAGE_BUDGET_BYTES = 7_000_000
+/** writeStored ile birebir aynı kodlamayı kullanarak bir değerin kapladığı
+ *  yeri tahmin eder — panelde "depolama kullanımı" göstergesi için. */
+export function estimateStoredSize(value: any): number {
+  try { return b64EncodeUtf8(JSON.stringify(value)).length } catch { return 0 }
+}
 
 // ── TEMİZLEME / GÜVENLİ DEĞER YARDIMCILARI ──
 const SECURITY_LIMITS = { text: 220, longText: 1400, url: 1200, image: 4_800_000, list: 40 }
@@ -312,29 +318,136 @@ export function repairProducts(products: any) {
 }
 export function money(n: any) { return new Intl.NumberFormat('tr-TR').format(Number(n) || 0) + ' TL' }
 
-/** Yüklenen görseli localStorage kotasını korumak için sıkıştırır: max 2000px kenar, JPEG q=0.92 */
-export function compressImageFile(file: File, { maxDim = 2000, quality = 0.92 }: { maxDim?: number, quality?: number } = {}): Promise<string> {
+/** Bir canvas'ı en iyi kalite/boyut oranıyla data URL'e çevirir: önce WebP
+ *  dener (JPEG'e göre aynı kalitede belirgin küçük dosya = kaliteyi
+ *  düşürmeden yer kazanma), tarayıcı gerçekten WebP üretmediyse (bazı eski
+ *  sürümler sessizce PNG'ye düşer) yüksek kaliteli JPEG'e geri döner. */
+function encodeCanvasBestQuality(canvas: HTMLCanvasElement, quality: number, jpegFallbackQuality: number): string {
+  try {
+    const webp = canvas.toDataURL('image/webp', quality)
+    if (webp.startsWith('data:image/webp')) return webp
+  } catch { /* WebP encode desteklenmiyor, JPEG'e düş */ }
+  return canvas.toDataURL('image/jpeg', jpegFallbackQuality)
+}
+
+/** EXIF Orientation etiketini (varsa) JPEG baytlarından okur. Telefon/
+ *  fotoğraf makinesi çıktıları görsel veriyi "yatık" saklayıp görüntüleyiciye
+ *  döndürme talimatı verir; canvas'a çizerken bu talimat otomatik
+ *  uygulanmaz — okumazsak yüklenen dikey fotoğraflar sitede yan/ters
+ *  görünür. 1-8 arası standart EXIF orientation değeri, yoksa 1 (normal). */
+function readExifOrientation(buffer: ArrayBuffer): number {
+  try {
+    const view = new DataView(buffer)
+    if (view.getUint16(0, false) !== 0xffd8) return 1 // JPEG değil
+    let offset = 2
+    const length = view.byteLength
+    while (offset < length) {
+      const marker = view.getUint16(offset, false)
+      offset += 2
+      if (marker === 0xffe1) {
+        if (view.getUint32(offset + 2, false) !== 0x45786966) return 1 // "Exif"
+        const little = view.getUint16(offset + 8, false) === 0x4949
+        const tiffOffset = offset + 8
+        const tagCount = view.getUint16(tiffOffset + view.getUint32(tiffOffset + 4, little), little)
+        const entriesStart = tiffOffset + view.getUint32(tiffOffset + 4, little) + 2
+        for (let i = 0; i < tagCount; i++) {
+          const entryOffset = entriesStart + i * 12
+          if (view.getUint16(entryOffset, little) === 0x0112) {
+            return view.getUint16(entryOffset + 8, little)
+          }
+        }
+        return 1
+      } else if ((marker & 0xff00) !== 0xff00) {
+        break
+      } else {
+        offset += view.getUint16(offset, false)
+      }
+    }
+  } catch { /* okunamadıysa normal kabul et */ }
+  return 1
+}
+
+/** EXIF orientation'a göre canvas boyutunu ve dönüşüm matrisini ayarlar,
+ *  böylece çizilen görsel her zaman "doğru tarafı yukarıda" çıkar. */
+function applyExifTransform(ctx: CanvasRenderingContext2D, orientation: number, width: number, height: number) {
+  switch (orientation) {
+    case 2: ctx.transform(-1, 0, 0, 1, width, 0); break
+    case 3: ctx.transform(-1, 0, 0, -1, width, height); break
+    case 4: ctx.transform(1, 0, 0, -1, 0, height); break
+    case 5: ctx.transform(0, 1, 1, 0, 0, 0); break
+    case 6: ctx.transform(0, 1, -1, 0, height, 0); break
+    case 7: ctx.transform(0, -1, -1, 0, height, width); break
+    case 8: ctx.transform(0, -1, 1, 0, 0, width); break
+    default: break
+  }
+}
+
+/** Ürün kartlarında kullanılan nötr kart zemin rengiyle birebir aynı
+ *  (bkz. style.css `.photoWrap{background:#EFE8D8}`) — kareye tamamlarken
+ *  kullanılan dolgu bu renkte olduğu için kenarlar sitenin kendi kart
+ *  zeminiyle kaynaşıp görünmez olur. */
+export const PRODUCT_IMAGE_PAD_COLOR = '#EFE8D8'
+
+/** Yüklenen görseli localStorage kotasını korumak için sıkıştırır (max
+ *  kenar + WebP/JPEG kodlama), EXIF döndürme bilgisini uygulayarak dikey
+ *  telefon fotoğraflarının yan/ters çıkmasını önler; ardından görseli HİÇ
+ *  KIRPMADAN kare bir tuvalin ortasına yerleştirir (boşta kalan kenarlar
+ *  sitenin kendi nötr kart rengiyle doldurulur). Böylece hangi en-boy
+ *  oranında yüklenirse yüklensin, kart alanına -fotoğrafın hiçbir parçası
+ *  kaybolmadan- eksiksiz ve boşluksuz oturur. (Not: site tarafı bilerek
+ *  object-fit:contain kullanıyor — bkz. "Ürün görsellerini kırpmadan tam
+ *  sığacak şekilde düzelt" commit'i; bu fonksiyon o kararı bozmadan, aynı
+ *  sonucu kaynağında -yükleme anında- garanti eder.) */
+export function compressImageFile(file: File, { maxDim = 2000, quality = 0.9, pad = true }: { maxDim?: number, quality?: number, pad?: boolean } = {}): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = () => reject(new Error('Dosya okunamadı'))
     reader.onload = () => {
+      const buffer = reader.result as ArrayBuffer
+      const orientation = readExifOrientation(buffer)
+      const blob = new Blob([buffer], { type: file.type })
+      const blobUrl = URL.createObjectURL(blob)
       const img = new Image()
-      img.onerror = () => reject(new Error('Görsel işlenemedi'))
+      img.onerror = () => { URL.revokeObjectURL(blobUrl); reject(new Error('Görsel işlenemedi')) }
       img.onload = () => {
+        URL.revokeObjectURL(blobUrl)
         let { width, height } = img
         if (width > maxDim || height > maxDim) {
           const ratio = Math.min(maxDim / width, maxDim / height)
           width = Math.round(width * ratio); height = Math.round(height * ratio)
         }
+        // orientation 5-8 iken kaynak 90° döndürülüyor, çizim boyutlarını buna göre takasla
+        const swapDims = orientation >= 5 && orientation <= 8
+        const drawW = swapDims ? height : width
+        const drawH = swapDims ? width : height
+
+        // 1. adım — EXIF yönünü uygulayarak görseli doğru tarafı yukarıda çiz
+        const oriented = document.createElement('canvas')
+        oriented.width = drawW; oriented.height = drawH
+        const octx = oriented.getContext('2d')!
+        octx.imageSmoothingEnabled = true
+        ;(octx as any).imageSmoothingQuality = 'high'
+        applyExifTransform(octx, orientation, width, height)
+        octx.drawImage(img, 0, 0, width, height)
+
+        if (!pad) { resolve(encodeCanvasBestQuality(oriented, quality, 0.93)); return }
+
+        // 2. adım — kırpmadan kareye ortala, boşta kalan kenarları sitenin
+        // kendi nötr kart rengiyle doldur (bkz. PRODUCT_IMAGE_PAD_COLOR)
+        const squareSize = Math.max(drawW, drawH)
         const canvas = document.createElement('canvas')
-        canvas.width = width; canvas.height = height
+        canvas.width = squareSize; canvas.height = squareSize
         const ctx = canvas.getContext('2d')!
-        ctx.drawImage(img, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/jpeg', quality))
+        ctx.imageSmoothingEnabled = true
+        ;(ctx as any).imageSmoothingQuality = 'high'
+        ctx.fillStyle = PRODUCT_IMAGE_PAD_COLOR
+        ctx.fillRect(0, 0, squareSize, squareSize)
+        ctx.drawImage(oriented, (squareSize - drawW) / 2, (squareSize - drawH) / 2)
+        resolve(encodeCanvasBestQuality(canvas, quality, 0.93))
       }
-      img.src = reader.result as string
+      img.src = blobUrl
     }
-    reader.readAsDataURL(file)
+    reader.readAsArrayBuffer(file)
   })
 }
 
@@ -457,7 +570,7 @@ export function normalizeSiteSettings(value: any): typeof DEFAULT_SITE_SETTINGS 
 
 // ── YÜKSEK SEVİYE VERİ ERİŞİMİ (site ile aynı localStorage anahtarları) ──
 export function loadProducts() { return repairProducts(readStored('ravun:products', INITIAL_PRODUCTS)) }
-export function saveProducts(products: any[]) { writeStored('ravun:products', products) }
+export function saveProducts(products: any[]) { return writeStored('ravun:products', products) }
 export function loadReviews() { return normalizeReviews(readStored('ravun:reviews', INITIAL_REVIEWS)) }
 export function saveReviews(reviews: Record<string, any[]>) { writeStored('ravun:reviews', reviews) }
 export function loadOrders() { return normalizeOrders(readStored('ravun:orders', [])) }

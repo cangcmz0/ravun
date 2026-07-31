@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ImagePlus, Plus, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   CATEGORIES,
   PRODUCT_STATUS,
+  STORAGE_BUDGET_BYTES,
   certificateNo as buildCertificateNo,
   compressImageFile,
+  estimateStoredSize,
 } from '@/lib/ravun-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -97,7 +99,8 @@ type ProductFormDialogProps = {
   product: any | null // null = yeni ürün
   nextId: number
   nextSortOrder: number
-  onSave: (product: any) => void
+  onSave: (product: any) => boolean
+  allProducts?: any[]
 }
 
 export function ProductFormDialog({
@@ -107,6 +110,7 @@ export function ProductFormDialog({
   nextId,
   nextSortOrder,
   onSave,
+  allProducts = [],
 }: ProductFormDialogProps) {
   const [form, setForm] = useState(() => emptyForm(nextId, nextSortOrder))
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -156,6 +160,18 @@ export function ProductFormDialog({
 
   const set = <K extends string>(key: K) => (value: any) =>
     setForm((f) => ({ ...f, [key]: value }))
+
+  // Bu ürün kaydedilirse tüm ürün verisinin (görseller dahil) kaplayacağı
+  // yeri canlı tahmin eder — panelin paylaştığı depolama kotasına göre.
+  const storageUsage = useMemo(() => {
+    const preview = { ...(product || {}), id: form.id, gallery: form.gallery, image: form.gallery[0] }
+    const exists = allProducts.some((p) => p.id === preview.id)
+    const projected = exists
+      ? allProducts.map((p) => (p.id === preview.id ? preview : p))
+      : [...allProducts, preview]
+    const bytes = estimateStoredSize(projected)
+    return { bytes, ratio: Math.min(1, bytes / STORAGE_BUDGET_BYTES) }
+  }, [allProducts, product, form.id, form.gallery])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || !files.length) return
@@ -256,8 +272,8 @@ export function ProductFormDialog({
       giftEligible: form.giftEligible,
       sortOrder: form.sortOrder,
     }
-    onSave(finalProduct)
-    onOpenChange(false)
+    const ok = onSave(finalProduct)
+    if (ok) onOpenChange(false)
   }
 
   return (
@@ -384,8 +400,26 @@ export function ProductFormDialog({
                 <ImagePlus className='size-4' /> {uploading ? 'Yükleniyor…' : 'Görsel ekle'}
               </Button>
               <p className='text-xs text-muted-foreground'>
-                İlk görsel kapak fotoğrafı olarak kullanılır. Yüklenen görseller otomatik sıkıştırılır.
+                İlk görsel kapak fotoğrafı olarak kullanılır. Yüklenen görseller otomatik olarak doğru
+                yönde döndürülür, kaliteden ödün vermeden sıkıştırılır ve fotoğrafın hiçbir yeri
+                kırpılmadan kare bir alana ortalanır — böylece hangi oranda çekilmiş olursa olsun
+                sitedeki kart alanına düzgünce oturur.
               </p>
+              <div className='space-y-1'>
+                <div className='h-1.5 w-full overflow-hidden rounded-full bg-muted'>
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      storageUsage.ratio > 0.9 ? 'bg-destructive' : storageUsage.ratio > 0.7 ? 'bg-amber-500' : 'bg-primary'
+                    )}
+                    style={{ width: `${Math.max(2, storageUsage.ratio * 100)}%` }}
+                  />
+                </div>
+                <p className={cn('text-xs', storageUsage.ratio > 0.9 ? 'text-destructive' : 'text-muted-foreground')}>
+                  Depolama kullanımı: {(storageUsage.bytes / 1_000_000).toFixed(1)} MB / {(STORAGE_BUDGET_BYTES / 1_000_000).toFixed(1)} MB
+                  {storageUsage.ratio > 0.9 && ' — dolmak üzere, birkaç görsel silmeniz gerekebilir.'}
+                </p>
+              </div>
               {form.gallery.length === 0 ? (
                 <div className='rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground'>
                   Henüz görsel eklenmedi.
