@@ -60,6 +60,8 @@ yorumlar bir kez yüklenir.
    (Eski `VITE_ADMIN_PIN_HASH` değişkeni varsa silin; artık kullanılmıyor.
    Silinmezse sunucu geriye dönük olarak onu da PIN hash'i kabul eder.)
 3. İsteğe bağlı: `SESSION_SECRET` = uzun rastgele metin.
+   (Sunucu bölgesi `vercel.json` içinde Frankfurt — `fra1` — olarak ayarlı;
+   Neon veritabanını da Frankfurt'ta oluşturun.)
 4. **Redeploy** edin. Kontrol: `https://SITE/api/health` →
    `{"ok":true,"admin":true}` dönmeli.
 5. `/admin`'e PIN ile girin. Daha önce panelde bu tarayıcıda değişiklik
