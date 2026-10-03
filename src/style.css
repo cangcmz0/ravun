@@ -4924,7 +4924,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   border:1px solid rgba(83,99,69,.22) !important;
 }
 @media (max-width:390px) {
-  .checkoutDrawer 
   .checkoutDrawer .cartItem img{
     width:74px !important;
     height:74px !important;
@@ -4939,7 +4938,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
     font-size:9px !important;
   }
 }
-.collectionFull .collectionFull .cardMedia{
+.collectionFull .cardMedia{
   aspect-ratio:1/1;
   background:linear-gradient(135deg,#f2eadc,#fffaf1);
   display:grid;
@@ -5498,8 +5497,7 @@ img[class]{
     aspect-ratio:1/1 !important;
     min-height:0 !important;
   }
-  .collectionFull 
-  .productInfo{
+  .collectionFull .productInfo{
     padding:18px !important;
   }
   .footer{
@@ -8214,7 +8212,7 @@ body{
   .checkoutSteps{
     padding:0 14px;
   }
-  .checkoutDrawer .checkoutDrawer .cartItem img{
+  .checkoutDrawer .cartItem img{
     width:86px !important;
     height:86px !important;
   }
@@ -8380,7 +8378,7 @@ body{
   .brandPillar h3{
     font-size:19px;
   }
-  .collectionFull .collectionFull .cardMedia,.collectionFull .photoWrap{
+  .collectionFull .cardMedia,.collectionFull .photoWrap{
     aspect-ratio:1/1 !important;
   }
   .collectionFull .productInfo{

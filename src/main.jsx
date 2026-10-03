@@ -9,105 +9,13 @@ const SITE_URL = ENV.VITE_SITE_URL || 'https://ravun-tau.vercel.app';
 const WA_NUMBER = ENV.VITE_WHATSAPP_NUMBER || '905375614967';
 const WA_EMAIL = ENV.VITE_CONTACT_EMAIL || 'atolye@ravun.com.tr';
 const WA_DISPLAY = `+${WA_NUMBER.replace(/^(\d{2})(\d{3})(\d{3})(\d{2})(\d{2})$/, '$1 $2 $3 $4 $5')}`;
-const API_URL = ENV.VITE_API_URL || '';
-const IS_PROD = ENV.MODE === 'production';
-/* ── GÜVENLİK KATMANI ──
-   Not: Frontend tabanlı PIN sadece geçici yerel korumadır. VPS aşamasında backend auth'a bağlanacak şekilde yapı ayrılmıştır.
-   PIN hash'i kaynak koduna gömülmemeli; .env dosyasından VITE_ADMIN_PIN_HASH ile sağlanmalıdır.
-   Üretim adımları: 1) Güçlü bir PIN seçin (min. 8 karakter).
-                    2) Hash üretin: node -e "const c=require('crypto');console.log(c.createHash('sha256').update('ravun-local-admin-v2:PININIZ').digest('hex'))"
-                    3) Çıktıyı .env dosyasına VITE_ADMIN_PIN_HASH=<hash> olarak ekleyin. */
-const ADMIN_PIN_SHA256 = ENV.VITE_ADMIN_PIN_HASH || '';
-if (!ADMIN_PIN_SHA256) {
-  console.error('[Ravun] VITE_ADMIN_PIN_HASH tanımlanmamış — .env dosyasını kontrol edin. Admin girişi devre dışı.');
-}
-/* BULGU DÜZELTMESİ: panelde "(1234)" gibi PIN'i sabit metin olarak göstermek,
-   PIN her değiştiğinde yanlış/eski bilgi göstermeye devam ederdi (ve panelde
-   gerçek PIN'i asla göstermemeliyiz zaten). Bunun yerine yalnızca "hâlâ bilinen
-   zayıf varsayılan PIN mi" diye kontrol ediyoruz — hash'i karşılaştırıyoruz,
-   PIN'in kendisini hiçbir yerde tutmuyoruz. */
-const KNOWN_WEAK_DEFAULT_PIN_HASH = '32456b37e2f184491ff7824b906b0f04fd2327eb36f39c5c50bb7f241be9f061'; // "1234"
-const ADMIN_PIN_IS_DEFAULT = ADMIN_PIN_SHA256 === KNOWN_WEAK_DEFAULT_PIN_HASH;
-const ADMIN_PIN_SALT = 'ravun-local-admin-v2';
+/* Admin paneli (PIN doğrulama, oturum) src/admin/lib/ravun-data.ts içinde yaşar.
+   Site tarafında yalnızca hata ekranındaki "önbelleği temizle" için oturum
+   anahtarlarını silen yardımcı kalır. */
 const ADMIN_SESSION_KEY = 'ravun:adm_s';
 const ADMIN_LOCK_KEY = 'ravun:adm_l';
 const ADMIN_ATTEMPT_KEY = 'ravun:adm_a';
 const ADMIN_TOKEN_KEY = 'ravun:adm_t';
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 60000; // 60 saniye (30'dan artırıldı)
-const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 saat
-async function sha256Hex(value) {
-  const bytes = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,'0')).join('');
-}
-function timingSafeEqual(a, b) {
-  const aa = String(a || '');
-  const bb = String(b || '');
-  let out = aa.length ^ bb.length;
-  const len = Math.max(aa.length, bb.length);
-  for (let i = 0; i < len; i++) out |= (aa.charCodeAt(i) || 0) ^ (bb.charCodeAt(i) || 0);
-  return out === 0;
-}
-/* PIN doğrulama — hash karşılaştırması */
-async function verifyAdminPin(inputPin) {
-  try {
-    if (!ADMIN_PIN_SHA256) return false; // hash yapılandırılmamışsa girişe izin verme
-    const normalized = String(inputPin || '').trim().slice(0, 32);
-    if (!normalized) return false;
-    const digest = await sha256Hex(`${ADMIN_PIN_SALT}:${normalized}`);
-    return timingSafeEqual(digest, ADMIN_PIN_SHA256);
-  } catch {
-    return false;
-  }
-}
-/* Token üretimi — oturum için rastgele imzalı token */
-function generateSessionToken() {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-/* Oturum geçerlilik kontrolü */
-function isValidAdminSession() {
-  try {
-    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
-    if (!raw) return false;
-    const session = JSON.parse(atob(raw));
-    if (!session.token || !session.exp || !session.fingerprint) return false;
-    if (Date.now() > session.exp) { clearAdminSession(); return false; }
-    const storedToken = sessionStorage.getItem(ADMIN_TOKEN_KEY);
-    if (!storedToken || storedToken !== session.token) return false;
-    /* BULGU DÜZELTMESİ: fingerprint alanı oturum oluşturulurken hesaplanıp
-       saklanıyordu ama daha önce hiçbir yerde geri kontrol edilmiyordu — var olan
-       ama işlevsiz bir kontrol izlenimi veriyordu. sessionStorage zaten sekmeye/
-       origin'e özel olduğu için bu tek başına güçlü bir sınır değil, ama session
-       verisi başka bir bağlama kopyalanırsa (örn. paylaşılan bir dosyadan) en
-       azından o cihaz/tarayıcı ortamıyla eşleşmediğini yakalar. */
-    if (session.fingerprint !== getBrowserFingerprint()) return false;
-    return true;
-  } catch { return false; }
-}
-/* Browser parmak izi — basit ama etkili */
-function getBrowserFingerprint() {
-  return btoa([
-    navigator.userAgent,
-    screen.width + 'x' + screen.height,
-    Intl.DateTimeFormat().resolvedOptions().timeZone
-  ].join('|')).slice(0, 24);
-}
-/* Yeni oturum oluştur */
-function createAdminSession() {
-  const token = generateSessionToken();
-  const session = {
-    token,
-    exp: Date.now() + SESSION_TIMEOUT_MS,
-    fingerprint: getBrowserFingerprint(),
-    created: Date.now()
-  };
-  sessionStorage.setItem(ADMIN_SESSION_KEY, btoa(JSON.stringify(session)));
-  sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
-  return token;
-}
 /* Oturumu temizle */
 function clearAdminSession() {
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
@@ -625,7 +533,7 @@ function normalizeFavorites(value, products = INITIAL_PRODUCTS) {
   const valid = new Set((products || []).map(p => Number(p.id)));
   return Array.isArray(value) ? [...new Set(value.map(Number).filter(id => valid.has(id)))].slice(0, 500) : [];
 }
-function normalizeCart(value, products = INITIAL_PRODUCTS) {
+function normalizeCart(value, products = INITIAL_PRODUCTS, giftPrice = DEFAULT_SITE_SETTINGS.giftPrice) {
   if (!Array.isArray(value)) return [];
   const byId = new Map((products || []).map(p => [Number(p.id), p]));
   return value.slice(0, 200).map(item => {
@@ -643,7 +551,8 @@ function normalizeCart(value, products = INITIAL_PRODUCTS) {
          biri kendi sepetindeki fiyatı DevTools ile düşürüp WhatsApp sipariş
          mesajında yanlış toplamla karşınıza çıkabilirdi. Fiyat artık her zaman
          güncel ürün kataloğundan (base.price) okunuyor; tek kaynak bu. */
-      price: safeNumber(base.price, 0, 0, 10_000_000),
+      price: safeNumber(base.price, 0, 0, 10_000_000) + (item?.giftWrap ? safeNumber(giftPrice, 0, 0, 100000) : 0),
+      giftPrice: item?.giftWrap ? safeNumber(giftPrice, 0, 0, 100000) : 0,
       qty: safeNumber(item?.qty, 1, 1, 99),
       image: safeImageSrc(item?.image || base.image, base.image),
       giftNote: cleanText(item?.giftNote || '', 300),
@@ -655,16 +564,34 @@ function normalizeCart(value, products = INITIAL_PRODUCTS) {
     };
   }).filter(Boolean);
 }
+/* Sipariş kalemleri bir "an görüntüsü"dür: sipariş anındaki fiyat ve seçimler
+   korunmalı. Önceden burada normalizeCart kullanılıyordu — o fonksiyon kalemi
+   güncel katalogla yeniden eşleştirdiği için (1) hediye paketli kalemler
+   ("3-gift-…" id'li) katalogda bulunamayıp siparişten SİLİNİYOR, (2) ürün
+   fiyatı sonradan değişince geçmiş siparişin tutarı da değişiyordu. Site her
+   açıldığında bu sonucu geri yazdığı için admin panelindeki sipariş kayıtları
+   bozuluyordu. Admin tarafındaki normalizeCartForOrder ile aynı kural. */
+function normalizeOrderItems(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 200).filter(Boolean).map(item => ({
+    ...item,
+    title: cleanText(item?.title || '', 120),
+    price: safeNumber(item?.price, 0, 0, 10_000_000),
+    qty: safeNumber(item?.qty, 1, 1, 99),
+    image: safeImageSrc(item?.image, `${A}products_hero-1.webp`)
+  }));
+}
 function normalizeOrders(value) {
-  return Array.isArray(value) ? value.slice(0, 5000).map(o => ({
+  return Array.isArray(value) ? value.slice(0, 5000).filter(Boolean).map(o => ({
     ...o,
-    id: cleanText(o?.id || `RVN-${Date.now()}`, 40),
+    id: o?.id ?? Date.now(),
+    orderNo: cleanText(o?.orderNo || `RVN-${Date.now()}`, 40),
     status: cleanText(o?.status || 'pending', 40),
     customerName: cleanText(o?.customerName || '', 90),
     customerPhone: cleanText(o?.customerPhone || '', 30),
-    trackingCode: cleanText(o?.trackingCode || '', 80),
+    cargoCode: cleanText(o?.cargoCode || o?.trackingCode || '', 80),
     note: cleanText(o?.note || '', 500),
-    items: normalizeCart(o?.items || [])
+    items: normalizeOrderItems(o?.items || [])
   })) : [];
 }
 const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim', favorites:'favoriler' };
@@ -2069,12 +1996,16 @@ function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go})
     const order=createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
     setCreated(order);
   };
-  const ensureOrderForWa=()=>{
-    if(cart.length===0)return;
-    if(!created){
-      const order=createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
-      setCreated(order);
-    }
+  /* Önceden link href'i render anında hesaplanıyordu; taslak tıklama anında
+     oluşturulduğu için WhatsApp mesajına sipariş numarası hiç girmiyordu.
+     Artık önce sipariş oluşturulup mesaj numarayla birlikte açılıyor. */
+  const ensureOrderForWa=e=>{
+    if(cart.length===0||created)return;
+    e.preventDefault();
+    const order=createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
+    setCreated(order);
+    const msg=buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created:order});
+    safeOpen(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`);
   };
   const addNoteChip=(text)=>setCustomer(c=>({
     ...c,
@@ -2270,7 +2201,10 @@ function Header({count, favCount, onCart, page, go, onSearch, settings, onNavTog
 function Hero({go, settings}){
   const [active,setActive]=useState(0);
   useEffect(()=>{const t=setInterval(()=>setActive(v=>(v+1)%slides.length),4500);return()=>clearInterval(t);},[]);
-  const s={...slides[active], tag:settings?.heroTag || slides[active].tag, line1:settings?.heroLine1 || slides[active].line1, line2:settings?.heroLine2 || slides[active].line2};
+  // Panelden düzenlenen hero metni ilk slayta uygulanır; diğer slaytlar kendi metnini korur.
+  const s=active===0
+    ? {...slides[0], tag:settings?.heroTag || slides[0].tag, line1:settings?.heroLine1 || slides[0].line1, line2:settings?.heroLine2 || slides[0].line2}
+    : slides[active];
   const heroSrc = slides[active]?.image || slides[0].image;
   return (
     <section id="hero" className="hero" style={{'--hero-img': `url(${heroSrc})`}}>
@@ -2544,10 +2478,10 @@ function App(){
   const [favorites,setFavorites]=useState(()=>normalizeFavorites(readStored('ravun:favorites', []), products));
   const [page,setPage]=useState(initialRoute.page);
   const [currentProduct,setCurrentProduct]=useState(initialRoute.product);
-  const [cart,setCart]=useState(()=>normalizeCart(readStored('ravun:cart', []), products));
+  const [siteSettings,setSiteSettings]=useState(()=>normalizeSiteSettings(readStored('ravun:siteSettings', DEFAULT_SITE_SETTINGS)));
+  const [cart,setCart]=useState(()=>normalizeCart(readStored('ravun:cart', []), products, siteSettings.giftPrice));
   const [orders,setOrders]=useState(()=>normalizeOrders(readStored('ravun:orders', [])));
   const [recentIds,setRecentIds]=useState(()=>recentProductIds(readStored('ravun:recent', []), products));
-  const [siteSettings,setSiteSettings]=useState(()=>normalizeSiteSettings(readStored('ravun:siteSettings', DEFAULT_SITE_SETTINGS)));
   const [drawer,setDrawer]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
@@ -2656,19 +2590,27 @@ function App(){
       toastTimer.current=setTimeout(()=>setToast(''),2200);
       return;
     }
-    const giftPrice=Number(p.giftWrap ? (p.giftPrice||0) : 0);
-    const cartId = p.giftWrap ? `${p.id}-gift-${Date.now()}` : p.id;
-    setCart(items=>p.giftWrap ? [...items,{...p,price:Number(p.price||0)+giftPrice,id:cartId,baseId:p.id,qty:1}] : (items.find(x=>x.id===p.id)?items.map(x=>x.id===p.id?{...x,qty:x.qty+1}:x):[...items,{...p,qty:1}]));
+    const giftPrice=p.giftWrap ? safeNumber(siteSettings.giftPrice, 0, 0, 100000) : 0;
+    // Karttan eklenirken de varsayılan boyut/ton seçili sayılır — detay sayfasından
+    // eklenen aynı ürünle ayrı satır oluşmasın, WhatsApp mesajında seçim görünsün.
+    p={...p, selectedSize:p.selectedSize ?? (p.sizes?.[0] || ''), selectedColor:p.selectedColor ?? (p.colorNames?.[0] || '')};
+    const variant=[p.selectedSize, p.selectedColor].filter(Boolean).join('|');
+    const cartId = p.giftWrap ? `${p.id}-gift-${Date.now()}` : (variant ? `${p.id}-${variant}` : p.id);
+    setCart(items=>p.giftWrap
+      ? [...items,{...p,price:Number(p.price||0)+giftPrice,giftPrice,id:cartId,baseId:p.id,qty:1}]
+      : (items.find(x=>x.id===cartId)
+        ? items.map(x=>x.id===cartId?{...x,qty:Math.min(99,x.qty+1)}:x)
+        : [...items,{...p,id:cartId,baseId:p.id,qty:1}]));
     if(toastTimer.current)clearTimeout(toastTimer.current);
     setToast(`${p.title} sepete eklendi`);
     toastTimer.current=setTimeout(()=>setToast(''),2200);
   };
   const dec=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:x.qty-1}:x).filter(x=>x.qty>0));
-  const incQty=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:x.qty+1}:x));
+  const incQty=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:Math.min(99,x.qty+1)}:x));
   const createOrder=(customer={})=>{
     // cart snapshot - stale closure önlemi için anlık değer alınır
     const cartSnapshot=[...cart];
-    const order={id:Date.now(),orderNo:makeOrderNo(),status:'pending',items:cartSnapshot.map(({id,title,price,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})=>({id,title,price,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})),customerName:customer.customerName||'',customerPhone:customer.customerPhone||'',note:customer.note||'',cargoCode:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    const order={id:Date.now(),orderNo:makeOrderNo(),status:'pending',items:cartSnapshot.map(({id,baseId,title,price,giftPrice,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})=>({id,baseId:baseId??id,title,price,giftPrice:giftPrice||0,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})),customerName:customer.customerName||'',customerPhone:customer.customerPhone||'',note:customer.note||'',cargoCode:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
     setOrders(os=>[order,...os]);
     if(toastTimer.current)clearTimeout(toastTimer.current);
     setToast(`${order.orderNo} sipariş taslağı oluşturuldu`);
