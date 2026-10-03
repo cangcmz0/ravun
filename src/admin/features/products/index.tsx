@@ -194,7 +194,58 @@ export function Products() {
           )}
         </div>
 
-        <div className='overflow-x-auto rounded-md border'>
+        {/* ── Mobil: kart listesi ── */}
+        <div className='grid gap-3 md:hidden'>
+          {!loaded ? (
+            <p className='text-muted-foreground py-10 text-center text-sm'>Yükleniyor…</p>
+          ) : loadError ? (
+            <p className='text-destructive py-10 text-center text-sm'>{loadError}</p>
+          ) : filtered.length === 0 ? (
+            <p className='text-muted-foreground py-10 text-center text-sm'>Ürün bulunamadı.</p>
+          ) : filtered.map((p, i) => {
+            const meta = PRODUCT_STATUS[normalizeProductStatus(p.status, p)]
+            return (
+              <div key={p.id} className={`rounded-lg border bg-card p-3 ${selected.includes(p.id) ? 'ring-2 ring-primary' : ''}`}>
+                <div className='flex gap-3'>
+                  {p.image ? (
+                    <img src={p.image} alt={p.title} className='size-16 shrink-0 rounded-md border object-cover' />
+                  ) : (
+                    <div className='bg-muted flex size-16 shrink-0 items-center justify-center rounded-md border'><ImageOff className='text-muted-foreground size-5' /></div>
+                  )}
+                  <div className='min-w-0 flex-1'>
+                    <div className='flex items-start justify-between gap-2'>
+                      <div className='min-w-0'>
+                        <p className='truncate font-medium'>{p.title}</p>
+                        <p className='text-muted-foreground text-xs'>{p.certificateNo} · {p.category}</p>
+                      </div>
+                      <Checkbox checked={selected.includes(p.id)} onCheckedChange={() => toggleSelect(p.id)} aria-label={`${p.title} seç`} />
+                    </div>
+                    <div className='mt-1 flex flex-wrap items-center gap-2'>
+                      <span className='font-semibold'>{money(p.price)}</span>
+                      <Badge variant='secondary' className={TONE_CLASS[meta.tone] || TONE_CLASS.available}>{meta.label}</Badge>
+                      {p.archiveVisible && <Badge variant='outline'>Arşiv</Badge>}
+                    </div>
+                  </div>
+                </div>
+                <div className='mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3'>
+                  <div className='flex items-center gap-4 text-sm'>
+                    <label className='flex items-center gap-2'><Switch checked={p.visible !== false} onCheckedChange={() => toggleVisible(p)} aria-label='Sitede görünür' />Görünür</label>
+                    <label className='flex items-center gap-2'><Switch checked={!!p.homeVisible} onCheckedChange={() => toggleHome(p)} aria-label='Ana sayfada göster' />Ana sayfa</label>
+                  </div>
+                  <div className='flex items-center gap-1'>
+                    <Button variant='ghost' size='icon' className='size-8' disabled={i === 0} onClick={() => moveSort(p, -1)} aria-label='Yukarı taşı'>↑</Button>
+                    <Button variant='ghost' size='icon' className='size-8' disabled={i === filtered.length - 1} onClick={() => moveSort(p, 1)} aria-label='Aşağı taşı'>↓</Button>
+                    <Button variant='ghost' size='icon' onClick={() => openEdit(p)} aria-label='Düzenle'><Pencil className='size-4' /></Button>
+                    <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(p)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* ── Masaüstü: tablo ── */}
+        <div className='hidden overflow-x-auto rounded-md border md:block'>
           <Table>
             <TableHeader>
               <TableRow>

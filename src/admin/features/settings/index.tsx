@@ -106,7 +106,7 @@ export function Settings() {
         ) : (
 
         <Tabs defaultValue='hero'>
-          <TabsList className='w-full flex-wrap justify-start'>
+          <TabsList className='w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&>button]:flex-none'>
             <TabsTrigger value='hero'>Hero</TabsTrigger>
             <TabsTrigger value='koleksiyon'>Koleksiyon & Atölye</TabsTrigger>
             <TabsTrigger value='kategoriler'>Kategoriler</TabsTrigger>

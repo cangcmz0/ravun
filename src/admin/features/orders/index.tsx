@@ -160,7 +160,57 @@ export function Orders() {
           </Select>
         </div>
 
-        <div className='overflow-x-auto rounded-md border'>
+        {/* ── Mobil: kart listesi ── */}
+        <div className='grid gap-3 md:hidden'>
+          {!loaded ? (
+            <p className='text-muted-foreground py-10 text-center text-sm'>Yükleniyor…</p>
+          ) : loadError ? (
+            <p className='text-destructive py-10 text-center text-sm'>{loadError}</p>
+          ) : filtered.length === 0 ? (
+            <div className='text-muted-foreground flex flex-col items-center gap-2 py-10 text-sm'>
+              <PackageSearch className='size-6' />
+              {orders.length === 0 ? 'Henüz sipariş yok.' : 'Sipariş bulunamadı.'}
+            </div>
+          ) : filtered.map((o) => (
+            <div key={o.id} className='rounded-lg border bg-card p-3'>
+              <div className='flex items-start justify-between gap-2'>
+                <div className='min-w-0'>
+                  <p className='font-medium'>{o.orderNo}</p>
+                  <p className='text-muted-foreground text-xs'>
+                    {o.createdAt ? new Date(o.createdAt).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </p>
+                </div>
+                <span className='font-semibold whitespace-nowrap'>{money(orderTotal(o))}</span>
+              </div>
+              <div className='mt-2 text-sm'>
+                <p>{o.customerName || '—'}{o.customerPhone ? <span className='text-muted-foreground'> · {o.customerPhone}</span> : null}</p>
+                <p className='text-muted-foreground text-xs'>
+                  {(o.items || [])[0]?.title || '—'}{(o.items || []).length > 1 ? ` +${o.items.length - 1} ürün daha` : ''}
+                  {o.cargoCode ? ` · Kargo: ${o.cargoCode}` : ''}
+                </p>
+              </div>
+              <div className='mt-3 flex items-center justify-between gap-2 border-t pt-3'>
+                <Select value={o.status || 'pending'} onValueChange={(v) => handleStatusChange(o, v)}>
+                  <SelectTrigger className='h-9 w-[170px]'>
+                    <Badge variant='secondary' className={TONE_CLASS[o.status] || TONE_CLASS.pending}>{orderStatusLabel(o.status)}</Badge>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ORDER_STATUSES.map(([key, label]) => (
+                      <SelectItem key={key} value={key}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className='flex items-center gap-1'>
+                  <Button variant='outline' size='sm' onClick={() => setDetailTarget(o)}><Eye className='me-1 size-4' />Detay</Button>
+                  <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(o)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Masaüstü: tablo ── */}
+        <div className='hidden overflow-x-auto rounded-md border md:block'>
           <Table>
             <TableHeader>
               <TableRow>
