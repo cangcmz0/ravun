@@ -18,6 +18,13 @@
     @apply min-h-svh w-full bg-background text-foreground has-[div[data-variant='inset']]:bg-sidebar;
   }
 
+  /* Yazı tipi: font-provider <html>'e "font-inter" / "font-manrope" / "font-system"
+     sınıfını dinamik ekliyor; Tailwind dinamik sınıfları üretmediği için kurallar
+     burada açıkça yazılı (önceden yazı tipi yanlışlıkla sitenin stilinden geliyordu). */
+  html, html.font-inter { font-family: var(--font-inter); }
+  html.font-manrope { font-family: var(--font-manrope); }
+  html.font-system { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+
   /* Override Radix scroll locking for sticky headers */
   body[data-scroll-locked] {
     overflow: unset !important;

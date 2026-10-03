@@ -2707,6 +2707,16 @@ function App(){
       site tasarımını etkilemez. */
 const rootEl = document.getElementById('root');
 if (window.location.pathname.startsWith('/admin')) {
+  // Sitenin stil dosyası (style.css) bu giriş dosyasında statik olarak yüklendiği
+  // için /admin'de de sayfaya ekleniyordu ve !important kuralları panele sızıyordu
+  // (ör. görsel boyutları). Panel açılmadan önce site stilini kaldırıyoruz:
+  //   üretimde: <link href="/assets/index-….css">, geliştirmede: <style data-vite-dev-id="…/src/style.css">
+  // Vite, panel kodunu yüklerken ortak parçaların stilini yeniden ekleyebildiği
+  // için sonradan eklenenler de bir gözlemciyle kaldırılır.
+  const SITE_CSS = 'link[rel="stylesheet"][href*="/assets/index-"], style[data-vite-dev-id$="/src/style.css"]';
+  const dropSiteCss = () => document.querySelectorAll(SITE_CSS).forEach(el => el.remove());
+  dropSiteCss();
+  new MutationObserver(dropSiteCss).observe(document.head, { childList: true });
   import('./admin/main.tsx')
     .then(({ mountAdminApp }) => mountAdminApp(rootEl))
     .catch(err => {
