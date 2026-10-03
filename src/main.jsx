@@ -503,7 +503,7 @@ function normalizeProducts(value) {
       story: cleanText(product?.story || fallback.story || product?.longDesc || fallback.longDesc || product?.desc || '', 900),
       craftTime: cleanText(product?.craftTime || fallback.craftTime || product?.delivery || fallback.delivery || 'Atölye sürecine göre', 80),
       finish: cleanText(product?.finish || fallback.finish || 'Doğal yağ bitiş', 80),
-      repeatable: cleanText(String(product?.repeatable || fallback.repeatable || 'Aynı desen tekrarlanmaz').replace(/Benzeri hazırlanabilir/gi, 'Aynı desen tekrarlanmaz').replace(/Benzeri özel siparişle hazırlanabilir\./gi, 'Satılan parça arşivde kalır.'), 120),
+      repeatable: cleanText(String(product?.repeatable || fallback.repeatable || '').replace(/,?\s*benzeri (özel siparişle )?hazırlanabilir\.?/gi, '').trim() || 'Aynı desen tekrarlanmaz', 120),
       certificateNo: certificateNo(product?.certificateNo ? product : {...fallback, id: product?.id || fallback.id}),
       productionMood: cleanText(product?.productionMood || fallback.productionMood || 'Tekil atölye parçası', 110),
       giftEligible: product?.giftEligible !== false,
@@ -1119,16 +1119,15 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
   const zoomScrollYRef=useRef(0);
   const swipeRef=useRef({x:0,y:0,until:0});
   const [activeImg,setActiveImg]=useState(0);
-  // Ana fotoğraf kutusu fotoğrafın kendi oranını alır (aşırı uç oranlar sınırlanır),
+  // Ana fotoğraf kutusu fotoğrafın kendi oranını alır (yalnızca çok uç oranlar sınırlanır),
   // böylece fotoğraf kırpılmadan ve etrafında boş şerit kalmadan tam oturur.
   const [imgRatio,setImgRatio]=useState(1);
   const onMainImgLoad=e=>{
     const {naturalWidth:w,naturalHeight:h}=e.currentTarget;
-    if(w&&h) setImgRatio(Math.min(1.6,Math.max(0.8,w/h)));
+    if(w&&h) setImgRatio(Math.min(2.4,Math.max(0.75,w/h)));
   };
   const [selColor,setSelColor]=useState(0);
   const [selSize,setSelSize]=useState(0);
-  const [tab,setTab]=useState('details');
   const [giftWrap,setGiftWrap]=useState(false);
   const [giftStyle,setGiftStyle]=useState('Kraft kutu + Ravun kartı');
   const [giftNote,setGiftNote]=useState('');
@@ -1164,7 +1163,7 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
     }
   };
   const handleMainImageClick=()=>{ if(Date.now() < (swipeRef.current.until||0)) return; openZoom(); };
-  useEffect(()=>{setActiveImg(0);setSelColor(0);setSelSize(0);setTab('details');setZoom(false);zoomHistoryRef.current=false;setZoomSrc('');setGiftWrap(false);setGiftNote('');setGiftRecipient('');setGiftDelivery('');setGiftStyle('Kraft kutu + Ravun kartı');window.scrollTo({top:0,behavior:'smooth'});},[product.id]);
+  useEffect(()=>{setActiveImg(0);setSelColor(0);setSelSize(0);setZoom(false);zoomHistoryRef.current=false;setZoomSrc('');setGiftWrap(false);setGiftNote('');setGiftRecipient('');setGiftDelivery('');setGiftStyle('Kraft kutu + Ravun kartı');window.scrollTo({top:0,behavior:'smooth'});},[product.id]);
   useEffect(()=>{
     const onKey=e=>{
       if(zoom || gallery.length<2) return;
@@ -1174,18 +1173,16 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
     window.addEventListener('keydown',onKey);
     return()=>window.removeEventListener('keydown',onKey);
   },[zoom,gallery.length]);
+  // Telefonda sistemin paylaşım menüsü açılır; desteklemeyen tarayıcıda link kopyalanır.
   const shareProduct=async()=>{
     const payload=productSharePayload(product);
-    try{
-      if(navigator.share){await navigator.share(payload);return;}
-    }catch{}
-    safeOpen(`https://wa.me/?text=${encodeURIComponent(payload.text+'\n'+payload.url)}`);
-  };
-  const copyProductLink=async()=>{
-    const payload=productSharePayload(product);
+    if(navigator.share){
+      try{ await navigator.share(payload); return; }
+      catch(err){ if(err?.name==='AbortError') return; }
+    }
     const ok=await copyToClipboard(payload.url);
     setCopied(ok);
-    setTimeout(()=>setCopied(false),1800);
+    setTimeout(()=>setCopied(false),2000);
   };
   const openZoom=useCallback(()=>{
     zoomScrollYRef.current=window.scrollY || 0;
@@ -1266,7 +1263,7 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
             <h1 className="pdTitle">{product.title}</h1>
             <div className="pdRatingRow">
               <StarRating rating={avg} count={reviews.length} size="md"/>
-              <button className="pdRatingJump" onClick={()=>setTab('reviews')}>Yorumları gör →</button>
+              <button className="pdRatingJump" onClick={()=>document.getElementById('yorumlar')?.scrollIntoView({behavior:'smooth',block:'start'})}>Yorumları gör →</button>
             </div>
             <div className="pdPrice"><strong>{money(product.price)}</strong><em>Fiyat malzeme seçimine göre değişebilir</em></div>
             <p className="pdDesc">{product.desc}</p>
@@ -1298,9 +1295,8 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
             </div>}
             <div className="pdActions">
               <button className={`addBtn pdAddBtn ${!status.canOrder?'archiveRequestBtn':''}`} disabled={!status.canOrder} onClick={()=>status.canOrder && add({...product,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,giftPrice:Number(settings?.giftPrice||0),selectedSize:selectedSizeName,selectedColor:selectedColorName})}>{status.archive ? 'Satıldı' : 'Sepete Ekle'}</button>
-              <a className="waModalBtn" href={status.canOrder?smartWaUrl:statusUrl} target="_blank" rel="noreferrer"><IWA/> WhatsApp</a>
-              <button className="shareBtn" onClick={shareProduct} aria-label="Ürünü paylaş"><IShare/> Paylaş</button>
-              <button className={`shareBtn copyLinkBtn ${copied?'copied':''}`} onClick={copyProductLink} aria-label="Ürün linkini kopyala">{copied?'✓ Kopyalandı':'Linki Kopyala'}</button>
+              <a className="waModalBtn" href={status.canOrder?smartWaUrl:statusUrl} target="_blank" rel="noreferrer" aria-label="WhatsApp ile sor"><IWA/> <span>WhatsApp</span></a>
+              <button className={`shareBtn ${copied?'copied':''}`} onClick={shareProduct} aria-label="Ürünü paylaş"><IShare/> <span>{copied?'Link kopyalandı':'Paylaş'}</span></button>
             </div>
             <div className="pdDelivery"><ITruck/><span>Teslim: {product.delivery} · Sigortalı kargo</span></div>
             <div className="pdTrustMini" aria-label="Ravun güven bilgileri">
@@ -1315,50 +1311,11 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
             </div>
           </div>
         </div>
-        <div className="pdTabsSection">
-          <div className="pdTabBar">
-            <button className={tab==='details'?'pdTabActive':''} onClick={()=>setTab('details')}>Ürün Detayları</button>
-            <button className={tab==='reviews'?'pdTabActive':''} onClick={()=>setTab('reviews')}>Yorumlar <span className="tabBadge">{reviews.length}</span></button>
-          </div>
-          {tab==='details'&&(
-            <div className="pdTabContent" key="details">
-              <div className="pdAccordion">
-                <details open>
-                  <summary>Açıklama</summary>
-                  <p>{product.longDesc || product.desc}</p>
-                </details>
-                <details>
-                  <summary>Malzeme ve ölçü</summary>
-                  <p>
-                    {product.materials?.length > 0 && <><strong style={{color:'var(--text-main)',fontWeight:800}}>Malzemeler:</strong> {product.materials.join(', ')}<br/></>}
-                    {product.dimensions && <><strong style={{color:'var(--text-main)',fontWeight:800}}>Ölçü:</strong> {product.dimensions}<br/></>}
-                    {product.weight && <><strong style={{color:'var(--text-main)',fontWeight:800}}>Ağırlık:</strong> {product.weight}<br/></>}
-                    {product.materialNote && <><br/>{product.materialNote}</>}
-                  </p>
-                </details>
-                <details>
-                  <summary>Bakım rehberi</summary>
-                  {product.careSummary && <p>{product.careSummary}</p>}
-                  {(product.careTips||[]).length > 0 && <ul>{(product.careTips||[]).map(t=><li key={t}>{t}</li>)}</ul>}
-                </details>
-                <details>
-                  <summary>Kargo ve paketleme</summary>
-                  <p>
-                    {product.packageNote && <>{product.packageNote}<br/><br/></>}
-                    <strong style={{color:'var(--text-main)',fontWeight:800}}>Tahmini teslim:</strong> {product.delivery} · Sigortalı kargo ile gönderilir.
-                  </p>
-                </details>
-              </div>
-            </div>
-          )}
-        {tab==='reviews'&&(
-            <div className="pdTabContent" key="reviews">
-              <ReviewSection productId={product.id} allReviews={allReviews} setAllReviews={setAllReviews}/>
-            </div>
-          )}
-        </div>
-        <ProductAtelierIdentity product={product}/>
-        <ProductCraftStory product={product}/>
+        <ProductDetails product={product}/>
+        <section id="yorumlar" className="pdxReviews reveal" aria-label="Müşteri yorumları">
+          <div className="pdxHead"><p>YORUMLAR</p><h2>Bu parça hakkında söylenenler</h2></div>
+          <ReviewSection productId={product.id} allReviews={allReviews} setAllReviews={setAllReviews}/>
+        </section>
         {related.length>0&&(
           <div className="pdRelated reveal">
             <div className="pdRelatedHead"><p>BENZERLERİ</p><h2>Beğenebileceğin<br/>diğer parçalar</h2></div>
@@ -1389,96 +1346,60 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
     </>
   );
 }
-function ProductAtelierIdentity({product}){
-  const certNo=certificateNo(product);
-  const materialLine=(product.materials||[]).slice(0,3).join(' · ') || 'Ravun seçili malzeme';
-  return (
-    <section className="pdIdentityBlock reveal" aria-label="Ravun ürün hikayesi ve sertifika">
-      <article className="identityStoryCard">
-        <p>BU PARÇANIN HİKAYESİ</p>
-        <h2>{product.title}<br/><em>neden özel?</em></h2>
-        <span>{product.story || product.longDesc || product.desc}</span>
-        <div className="identityMetaGrid">
-          {product.craftTime && <div><small>Üretim süresi</small><b>{product.craftTime}</b></div>}
-          {product.finish && <div><small>Yüzey bitişi</small><b>{product.finish}</b></div>}
-          {product.repeatable && <div><small>Tekrar durumu</small><b>{product.repeatable}</b></div>}
-        </div>
-      </article>
-      <aside className="certificateCard" aria-label="Ravun dijital sertifika">
-        <div className="certificatePattern" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/><i/><i/></div>
-        <small>RAVUN ATÖLYE</small>
-        <h3>Dijital Parça Sertifikası</h3>
-        <strong>{certNo}</strong>
-        <dl>
-          <div><dt>Parça</dt><dd>{product.title}</dd></div>
-          <div><dt>Malzeme</dt><dd>{materialLine}</dd></div>
-          <div><dt>Ruh</dt><dd>{product.productionMood}</dd></div>
-        </dl>
-        <span>Her ürünün damar, ton ve elde bitiriş farkı sertifika değerini oluşturur.</span>
-      </aside>
-    </section>
-  );
-}
-function ProductCraftStory({product}){
+/* ── ÜRÜN DETAY: ÜRÜN HAKKINDA ──
+   Önceden açıklama/malzeme/bakım bilgisi sekmeli akordeonda, "parçanın
+   hikayesi" kartında, sertifika kartında ve "atölye bilgisi" kartlarında
+   üç dört kez tekrar ediyordu. Artık tek bölüm: solda hikaye + özellik
+   listesi, sağda bakım / kargo / sık sorulanlar akordeonu. */
+function ProductDetails({product}){
+  const longText = product.longDesc || product.desc;
+  const story = product.story && product.story !== longText ? product.story : '';
+  const specs = [
+    ['Malzeme', (product.materials||[]).join(', ')],
+    ['Ölçü', product.dimensions],
+    ['Ağırlık', product.weight],
+    ['Üretim süresi', product.craftTime],
+    ['Yüzey bitişi', product.finish],
+    ['Teslim', product.delivery ? `${product.delivery} · sigortalı kargo` : ''],
+    ['Parça no', certificateNo(product)],
+    ['Tekrar durumu', product.repeatable]
+  ].filter(([,v])=>v);
+  const careTips = (product.careTips && product.careTips.length) ? product.careTips : defaultCareTips(product);
   const faqs=[
-    ['Teslim süresi nedir?', `${product.delivery || '7-14 iş günü'} içinde üretim ve paketleme tamamlanır. Özel ölçü taleplerinde süre değişebilir.`],
-    ['Ahşap damarları aynı olur mu?', 'Hayır. Doğal ahşapta her damar farklıdır; bu yüzden her Ravun parçası tek üretim hissi taşır.'],
-    ['Kişiselleştirme yapılır mı?', 'Ölçü, epoksi tonu ve kullanım amacına göre WhatsApp üzerinden özel sipariş konuşulabilir.'],
-    ['Nasıl temizlemeliyim?', 'Nemli olmayan yumuşak bez kullanın. Direkt güneş ve yoğun kimyasal temizleyicilerden kaçının.']
+    ['Teslim süresi nedir?', `${product.delivery || '2–3 hafta'} içinde üretim ve paketleme tamamlanır. Özel ölçü taleplerinde süre değişebilir.`],
+    ['Ahşap damarları fotoğraftakiyle aynı mı olur?', 'Doğal ahşapta her damar farklıdır; ton ve akış fotoğraftakine yakın olur ama her parça kendine özgüdür.'],
+    ['Kişiselleştirme yapılır mı?', 'Ölçü, epoksi tonu ve kullanım amacına göre WhatsApp üzerinden özel sipariş konuşulabilir.']
   ];
   return (
-    <section className="pdCraftBlock reveal" aria-label="Üretim ve bakım bilgileri">
-      <div className="craftHead"><p>ATÖLYE BİLGİSİ</p><h2>Malzeme,<br/><em>üretim ve bakım.</em></h2><span>Her Ravun parçasının arkasında titiz bir süreç yatar. Aşağıda bu ürüne dair tüm teknik bilgiyi bulabilirsiniz.</span></div>
-      <div className="craftTimeline">
-        {steps.map(([n,t,d])=><article key={n}><strong>{n}</strong><div><h3>{t}</h3><p>{d}</p></div></article>)}
+    <section className="pdxDetails reveal" aria-label="Ürün hakkında">
+      <div className="pdxStory">
+        <div className="pdxHead"><p>ÜRÜN HAKKINDA</p><h2>Bu parçanın hikayesi</h2></div>
+        {longText && <p className="pdxLead">{longText}</p>}
+        {story && <p>{story}</p>}
+        {product.materialNote && <p className="pdxNote">{product.materialNote}</p>}
+        {specs.length>0 && (
+          <dl className="pdxSpecs">
+            {specs.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          </dl>
+        )}
       </div>
-      <div className="pdCareGrid">
-        <article className="pdCareCard pdPackageCard">
-          <img src={`${A}brand-tags-canvas.webp`} alt="Ravun paketleme ve marka etiketi" loading="lazy"/>
-          <div><p>PAKETLEME</p><h3>{product.packageNote || 'Korumalı kutu, bakım notu ve marka etiketi.'}</h3><span>Ürün yüzeyi çizilmeye karşı sarılır, köşeler desteklenir ve gönderim öncesi son kontrol yapılır.</span></div>
-        </article>
-        <article className="pdCareCard">
-          <p>BAKIM REHBERİ</p>
-          <h3>{product.careSummary || 'Uzun ömürlü kullanım için'}</h3>
-          <ul>
-            {(product.careTips || defaultCareTips(product)).map(t=><li key={t}>{t}</li>)}
-          </ul>
-        </article>
-        <article className="pdCareCard pdMaterialCard">
-          <p>MALZEME NOTU</p>
-          <h3>{(product.materials||[]).slice(0,3).join(' · ') || 'Ravun malzemesi'}</h3>
-          <span>{product.materialNote || 'Doğal malzeme dokusu her parçada küçük farklılıklar gösterebilir.'}</span>
-        </article>
-      </div>
-      <div className="pdFaqBlock">
-        <div className="pdFaqTitle"><p>SSS</p><h3>Sık sorulanlar</h3></div>
-        <div className="pdFaqList">{faqs.map(([q,a])=><details key={q}><summary>{q}</summary><p>{a}</p></details>)}</div>
-      </div>
-    </section>
-  );
-}
-function ProductShareSeoStrip({product}){
-  const [copied,setCopied]=useState(false);
-  const payload=productSharePayload(product);
-  const waUrl=`https://wa.me/?text=${encodeURIComponent(payload.text+'\n'+payload.url)}`;
-  const doCopy=async()=>{
-    const ok=await copyToClipboard(payload.url);
-    setCopied(ok);
-    setTimeout(()=>setCopied(false),1800);
-  };
-  return (
-    <section className="pdShareSeoStrip reveal" aria-label="Ürün paylaşım ve link bilgisi">
-      <div className="pdShareSeoCopy">
-        <p>PAYLAŞIM HAZIR</p>
-        <h3>Ürün linki düzenli, sosyal paylaşım bilgisi hazır.</h3>
-        <span>WhatsApp veya Instagram DM için ürün adı, parça numarası ve link karışmadan kopyalanır.</span>
-      </div>
-      <div className="pdShareSeoActions">
-        <code>{payload.url}</code>
-        <div>
-          <button type="button" onClick={doCopy}>{copied?'✓ Link kopyalandı':'Linki kopyala'}</button>
-          <a href={waUrl} target="_blank" rel="noreferrer"><IWA/> WhatsApp’ta paylaş</a>
-        </div>
+      <div className="pdxInfo">
+        <details open>
+          <summary>Bakım rehberi</summary>
+          {product.careSummary && <p>{product.careSummary}</p>}
+          <ul>{careTips.map(t=><li key={t}>{t}</li>)}</ul>
+        </details>
+        <details>
+          <summary>Kargo ve paketleme</summary>
+          {product.packageNote && <p>{product.packageNote}</p>}
+          <p>Ürün yüzeyi çizilmeye karşı sarılır, köşeler desteklenir ve gönderim öncesi son kontrol yapılır. Tahmini teslim: {product.delivery || '2–3 hafta'}.</p>
+        </details>
+        {faqs.map(([q,a])=>(
+          <details key={q}>
+            <summary>{q}</summary>
+            <p>{a}</p>
+          </details>
+        ))}
       </div>
     </section>
   );
@@ -1832,8 +1753,8 @@ function formatMsgDate(iso) {
   } catch { return iso; }
 }
 /* ── İLETİŞİM ── */
-function ContactPage(){return <main className="page"><Contact/></main>;}
-function Contact(){
+function ContactPage({settings}){return <main className="page"><Contact settings={settings}/></main>;}
+function Contact({settings}){
   const EMPTY = {isim:'',eposta:'',telefon:'',parca:'',mesaj:''};
   const [form,setForm] = useState(EMPTY);
   const [sent,setSent] = useState(false);
@@ -1980,116 +1901,157 @@ function Contact(){
       </div>
       <div className="contactSide reveal">
         <div className="mapCard"><svg viewBox="0 0 500 260" aria-hidden="true"><path d="M0 155 C95 120 160 140 230 155 S360 85 500 130"/><circle cx="300" cy="123" r="9"/></svg><span>⌾ BEYKOZ ATÖLYE</span></div>
-        <ul><li><a href={`mailto:${WA_EMAIL}`}>✉ {WA_EMAIL}</a></li><li><a href={`https://wa.me/${WA_NUMBER}`} target="_blank" rel="noreferrer">☏ {WA_DISPLAY}</a></li><li>◎ @ravun.atolye</li><li>⌖ Beykoz, İstanbul</li></ul>
+        <ul><li><a href={`mailto:${WA_EMAIL}`}>✉ {WA_EMAIL}</a></li><li><a href={`https://wa.me/${WA_NUMBER}`} target="_blank" rel="noreferrer">☏ {WA_DISPLAY}</a></li><li><a href={safeUrl(settings?.instagramUrl || 'https://instagram.com/ravun.atolye', 'https://instagram.com/')} target="_blank" rel="noreferrer">◎ {settings?.instagram || '@ravun.atolye'}</a></li><li>⌖ Beykoz, İstanbul</li></ul>
       </div>
     </section>
   );
 }
 /* ── SEPET DRAWER ── */
-function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go}){
+/* Sepet çekmecesi — tek ve net akış:
+   1) Sepet: ürünler (adet / kaldır) + toplam → "Siparişe devam et"
+   2) Bilgiler: ad, telefon (zorunlu), not → "Siparişi tamamla"
+   3) Onay: sipariş no + numarayı taşıyan WhatsApp butonu.
+   Sipariş kaydı oluşturulamazsa müşteri yine WhatsApp ile sipariş verebilir. */
+function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCart, go}){
+  const [step,setStep]=useState('cart');
   const [customer,setCustomer]=useState({name:'',phone:'',note:''});
   const [created,setCreated]=useState(null);
   const [busy,setBusy]=useState(false);
   const [orderError,setOrderError]=useState('');
+  const [touched,setTouched]=useState(false);
   const total=useMemo(()=>cart.reduce((s,x)=>s+x.price*x.qty,0),[cart]);
-  const giftCount=cart.filter(x=>x.giftWrap).length;
   const itemCount=cart.reduce((s,x)=>s+Number(x.qty||0),0);
-  const waMsg=encodeURIComponent(buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created}));
+  const giftCount=cart.filter(x=>x.giftWrap).length;
+  const giftTotal=cart.reduce((s,x)=>s+(x.giftWrap?Number(x.giftPrice||0)*x.qty:0),0);
+  const phoneDigits=customer.phone.replace(/\D/g,'');
+  const nameOk=customer.name.trim().length>=2;
+  const phoneOk=phoneDigits.length>=10;
+  const waUrl=order=>`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created:order}))}`;
   useEffect(()=>{
     if(!open)return;
-    // Not: body scroll kilidi App seviyesinde (drawer) merkezi olarak yönetilir —
-    // burada ayrıca modal-open class'ı ekleyip çıkarmak diğer overlay'lerle (arama,
-    // hamburger menü) çakışıp scroll kilidinin erken açılmasına yol açıyordu.
+    // Not: body scroll kilidi App seviyesinde (drawer) merkezi olarak yönetilir.
     const onKey=e=>{if(e.key==='Escape')setOpen(false);};
     window.addEventListener('keydown',onKey);
-    return()=>{window.removeEventListener('keydown',onKey);};
+    return()=>window.removeEventListener('keydown',onKey);
   },[open,setOpen]);
   useEffect(()=>{
-    if(!open){
-      // Sipariş oluşturulmuşsa (taslak veya WhatsApp) drawer kapanırken sepeti temizle —
-      // önceden sepet hiç temizlenmiyordu, tamamlanan sipariş kalemleri sepette kalıyordu.
-      if(created) clearCart?.();
-      setCreated(null);
-      setOrderError('');
-      setCustomer({name:'',phone:'',note:''});
-    }
+    if(open)return;
+    // Sipariş tamamlandıysa çekmece kapanırken sepet temizlenir ve akış başa döner.
+    if(created) clearCart?.();
+    setCreated(null); setOrderError(''); setTouched(false); setStep('cart');
+    if(created) setCustomer({name:'',phone:'',note:''});
   },[open]);
-  const placeOrder=async()=>{
+  const submitOrder=async()=>{
+    setTouched(true);
+    if(!nameOk||!phoneOk||busy||cart.length===0)return;
     setBusy(true); setOrderError('');
-    try {
-      const order=await createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
-      setCreated(order);
-      return order;
-    } catch (err) {
-      setOrderError(err.message);
-      return null;
-    } finally {
-      setBusy(false);
-    }
+    try{
+      const order=await createOrder({customerName:customer.name.trim(),customerPhone:customer.phone.trim(),note:customer.note.trim()});
+      setCreated(order); setStep('done');
+    }catch(err){
+      setOrderError(err.message||'Sipariş oluşturulamadı.');
+    }finally{ setBusy(false); }
   };
-  const submitOrder=()=>{
-    if(cart.length===0||busy||created)return;
-    placeOrder();
-  };
-  /* Önceden link href'i render anında hesaplanıyordu; taslak tıklama anında
-     oluşturulduğu için WhatsApp mesajına sipariş numarası hiç girmiyordu.
-     Artık önce sipariş oluşturulup mesaj numarayla birlikte açılıyor. */
-  const ensureOrderForWa=async e=>{
-    if(cart.length===0||created)return;
-    e.preventDefault();
-    if(busy)return;
-    // Sekme tıklama anında açılır (açılır pencere engelleyicisine takılmasın),
-    // sipariş kaydı oluşunca numarayla birlikte WhatsApp'a yönlendirilir.
-    const win=window.open('about:blank','_blank');
-    const order=await placeOrder();
-    const msg=buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created:order});
-    const url=`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
-    if(win){ try{ win.opener=null; }catch{} win.location.href=url; }
-    else window.location.href=url;
-  };
-  const addNoteChip=(text)=>setCustomer(c=>({
-    ...c,
-    note: cleanText([c.note, text].filter(Boolean).join(c.note ? ' · ' : ''), 500)
-  }));
+  const addNoteChip=text=>setCustomer(c=>({...c, note: cleanText([c.note, text].filter(Boolean).join(c.note ? ' · ' : ''), 500)}));
+  const close=()=>setOpen(false);
+  const title=step==='info'?'Bilgileriniz':step==='done'?'Siparişiniz alındı':'Sepetim';
   return (
     <div className={open?'cartLayer show':'cartLayer'} role="dialog" aria-modal="true" aria-label="Sepet">
-      <button className="cartDim" onClick={()=>setOpen(false)} aria-label="Kapat"/>
-      <aside className="drawer checkoutDrawer">
-        <div className="drawerHead ravunCartHead"><div><small className="checkoutKicker">SEPET</small><h3>{itemCount} parça</h3></div><button onClick={()=>setOpen(false)} aria-label="Sepeti kapat"><IClose/></button></div>
-        {cart.length>0&&<div className="checkoutSteps" aria-label="Sipariş adımları"><span className="isDone">Sepet</span><span>Bilgi</span><span>WhatsApp</span></div>}
-        {cart.length===0?<div className="emptyCartState"><div className="emptyCartIcon"><ICart/></div><h4>Sepetiniz boş</h4><p>Beğendiğiniz parçayı ekleyin; sipariş için WhatsApp üzerinden bizimle buluşacaksınız.</p><button onClick={()=>{setOpen(false);go?.('collection');}}>Koleksiyonu Keşfet</button></div>
-          :cart.map(item=>(
-          <div className="cartItem" key={item.id}>
-            <img src={item.image} alt={item.title}/>
-            <div><b>{item.title}</b><span>{money(item.price)}</span>
-              {(item.selectedSize||item.selectedColor)&&<small className="cartGiftLine">{[item.selectedSize,item.selectedColor].filter(Boolean).join(' · ')}</small>}
-              {item.giftWrap&&<small className="cartGiftLine">🎁 {item.giftStyle||'Hediye paketi'}{item.giftRecipient?` · ${item.giftRecipient}`:''}{item.giftDelivery?` · ${item.giftDelivery}`:''}{item.giftNote?` · “${item.giftNote}”`:''}</small>}
-              <div><button onClick={()=>dec(item.id)} aria-label="Azalt">−</button><em>{item.qty}</em><button onClick={()=>inc(item.id)} aria-label="Artır">+</button></div>
-            </div>
+      <button className="cartDim" onClick={close} aria-label="Kapat" tabIndex={open?0:-1}/>
+      <aside className="drawer checkoutDrawer cx">
+        <header className="cxHead">
+          {step==='info'
+            ? <button className="cxBack" onClick={()=>setStep('cart')} aria-label="Sepete dön"><IChevron dir="left"/></button>
+            : <span className="cxHeadIcon"><ICart/></span>}
+          <div><h3>{title}</h3>{step!=='done'&&cart.length>0&&<small>{itemCount} ürün · {money(total)}</small>}</div>
+          <button className="cxClose" onClick={close} aria-label="Sepeti kapat"><IClose/></button>
+        </header>
+
+        {step==='done'&&created ? (
+          <div className="cxBody cxDone">
+            <div className="cxDoneIcon"><ICheck/></div>
+            <h4>Teşekkürler{customer.name?`, ${customer.name.trim().split(' ')[0]}`:''}!</h4>
+            <p>Siparişiniz atölyeye ulaştı. Ödeme ve teslim detayları için en kısa sürede sizinle iletişime geçeceğiz.</p>
+            <div className="cxOrderNo"><small>Sipariş no</small><b>{created.orderNo}</b></div>
+            <a className="cxBtn cxBtnWa" href={waUrl(created)} target="_blank" rel="noreferrer"><IWA/> WhatsApp'tan yazın</a>
+            <button className="cxBtn cxBtnGhost" onClick={()=>{close();go?.('collection');}}>Alışverişe devam et</button>
           </div>
-        ))}
-        {cart.length>0&&<div className="checkoutSummary">
-          <div><span>Ürün adedi</span><b>{itemCount}</b></div>
-          <div><span>Hediye paketi</span><b>{giftCount ? `${giftCount} ürün` : 'Yok'}</b></div>
-          <div><span>Teslim şekli</span><b>WhatsApp onaylı</b></div>
-        </div>}
-        <div className="drawerTotal"><span>Toplam</span><strong>{money(total)}</strong></div>
-        {cart.length>0&&(
-          <div className="drawerOrderBox">
-            <div><b>Sipariş bilgileri</b><small>Siparişiniz atölyeye iletilir; ödeme ve teslim detayları WhatsApp üzerinden netleşir.</small></div>
-            <input value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))} placeholder="Ad Soyad"/>
-            <input value={customer.phone} onChange={e=>setCustomer(c=>({...c,phone:e.target.value}))} placeholder="Telefon"/>
-            <div className="noteChips" aria-label="Hızlı sipariş notları">
-              {['Hediye paketi olsun','Ölçü konuşalım','Teslim tarihi önemli'].map(chip=><button key={chip} type="button" onClick={()=>addNoteChip(chip)}>{chip}</button>)}
-            </div>
-            <textarea value={customer.note} onChange={e=>setCustomer(c=>({...c,note:e.target.value}))} placeholder="Ölçü, renk, özel istek notu" rows="2"/>
-            <button className="draftOrderBtn" onClick={submitOrder} disabled={!!created||busy}>{created?'✓ Sipariş Alındı':busy?'Gönderiliyor…':'Siparişi Gönder'}</button>
-            <small className="checkoutHint">Siparişiniz kaydedilir ve atölyeye ulaşır. Dilerseniz aşağıdan WhatsApp ile de yazabilirsiniz; mesaj sipariş numaranızı taşır.</small>
-            {created&&<p className="orderCreated">✓ Siparişiniz alındı. Sipariş no: <b>{created.orderNo}</b></p>}
-            {orderError&&<p className="orderError" role="alert">{orderError} WhatsApp ile sipariş vermeye devam edebilirsiniz.</p>}
+        ) : cart.length===0 ? (
+          <div className="cxBody cxEmpty">
+            <div className="cxEmptyIcon"><ICart/></div>
+            <h4>Sepetiniz boş</h4>
+            <p>Beğendiğiniz parçaları sepete ekleyin; siparişi birkaç adımda tamamlayın.</p>
+            <button className="cxBtn" onClick={()=>{close();go?.('collection');}}>Koleksiyonu keşfet</button>
           </div>
+        ) : step==='info' ? (
+          <>
+            <div className="cxBody">
+              <p className="cxIntro">Siparişinizi kaydedip size dönüş yapabilmemiz için iletişim bilgileriniz yeterli. Ödeme ve teslim detaylarını birlikte netleştiriyoruz.</p>
+              <label className={`cxField ${touched&&!nameOk?'cxInvalid':''}`}>
+                <span>Ad Soyad *</span>
+                <input value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))} autoComplete="name" placeholder="Adınız ve soyadınız"/>
+                {touched&&!nameOk&&<em>Lütfen adınızı yazın.</em>}
+              </label>
+              <label className={`cxField ${touched&&!phoneOk?'cxInvalid':''}`}>
+                <span>Telefon *</span>
+                <input value={customer.phone} onChange={e=>setCustomer(c=>({...c,phone:e.target.value}))} autoComplete="tel" inputMode="tel" placeholder="05xx xxx xx xx"/>
+                {touched&&!phoneOk&&<em>Geçerli bir telefon numarası yazın.</em>}
+              </label>
+              <div className="cxField">
+                <span>Not (isteğe bağlı)</span>
+                <div className="cxChips">
+                  {['Hediye paketi olsun','Ölçü konuşalım','Teslim tarihi önemli'].map(chip=><button key={chip} type="button" onClick={()=>addNoteChip(chip)}>+ {chip}</button>)}
+                </div>
+                <textarea value={customer.note} onChange={e=>setCustomer(c=>({...c,note:e.target.value}))} rows={3} placeholder="Ölçü, renk veya özel isteğiniz"/>
+              </div>
+              {orderError&&(
+                <div className="cxError" role="alert">
+                  <p>{orderError}</p>
+                  <a href={waUrl(null)} target="_blank" rel="noreferrer"><IWA/> Siparişi WhatsApp ile gönderin</a>
+                </div>
+              )}
+            </div>
+            <footer className="cxFoot">
+              <div className="cxTotal"><span>Toplam</span><b>{money(total)}</b></div>
+              <button className="cxBtn" onClick={submitOrder} disabled={busy}>{busy?'Gönderiliyor…':'Siparişi tamamla'}</button>
+              <small className="cxFine">Ödeme bu aşamada alınmaz; siparişiniz onaylandıktan sonra iletişime geçeriz.</small>
+            </footer>
+          </>
+        ) : (
+          <>
+            <div className="cxBody">
+              <ul className="cxItems">
+                {cart.map(item=>(
+                  <li key={item.id} className="cxItem">
+                    <img src={item.image} alt={item.title}/>
+                    <div className="cxItemInfo">
+                      <div className="cxItemTop">
+                        <b>{item.title}</b>
+                        <button className="cxRemove" onClick={()=>remove(item.id)} aria-label={`${item.title} ürününü kaldır`}><ITrash/></button>
+                      </div>
+                      {(item.selectedSize||item.selectedColor)&&<small>{[item.selectedSize,item.selectedColor].filter(Boolean).join(' · ')}</small>}
+                      {item.giftWrap&&<small className="cxGift">🎁 {item.giftStyle||'Hediye paketi'}{item.giftPrice?` (+${money(item.giftPrice)})`:''}{item.giftRecipient?` · ${item.giftRecipient}`:''}</small>}
+                      <div className="cxItemBottom">
+                        <div className="cxQty">
+                          <button onClick={()=>dec(item.id)} disabled={item.qty<=1} aria-label="Azalt">−</button>
+                          <span>{item.qty}</span>
+                          <button onClick={()=>inc(item.id)} aria-label="Artır">+</button>
+                        </div>
+                        <strong>{money(item.price*item.qty)}</strong>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <footer className="cxFoot">
+              {giftTotal>0&&<div className="cxLine"><span>Hediye paketi</span><span>{money(giftTotal)}</span></div>}
+              <div className="cxTotal"><span>Toplam</span><b>{money(total)}</b></div>
+              <button className="cxBtn" onClick={()=>setStep('info')}>Siparişe devam et</button>
+              <a className="cxLink" href={waUrl(null)} target="_blank" rel="noreferrer"><IWA/> Önce soru sormak için WhatsApp</a>
+            </footer>
+          </>
         )}
-        <a className="waOrder" href={`https://wa.me/${WA_NUMBER}?text=${waMsg}`} target="_blank" rel="noreferrer" onClick={ensureOrderForWa}>WhatsApp ile Sipariş Ver</a>
       </aside>
     </div>
   );
@@ -2109,9 +2071,14 @@ function SearchOverlay({open, onClose, products, goProduct}){
     return()=>{clearTimeout(t);window.removeEventListener('keydown',onKey);setQ('');};
   },[open,onClose]);
   const results=useMemo(()=>{
-    const v=q.trim().toLocaleLowerCase('tr-TR');
-    if(!v)return products.filter(p=>p.visible).slice(0,6);
-    return products.filter(p=>p.visible&&(p.title.toLocaleLowerCase('tr-TR').includes(v)||p.desc.toLocaleLowerCase('tr-TR').includes(v)||p.category.toLocaleLowerCase('tr-TR').includes(v))).slice(0,8);
+    // Türkçe harf farklarına duyarsız (ı/i, ş/s…) ve malzeme/etiket/parça no dahil arama
+    const words=normalizeText(q).split(' ').filter(Boolean);
+    const visible=products.filter(p=>p.visible!==false);
+    if(!words.length)return visible.slice(0,6);
+    return visible.filter(p=>{
+      const hay=normalizeText([p.title,p.desc,p.category,p.tag,certificateNo(p),...(p.materials||[])].join(' '));
+      return words.every(w=>hay.includes(w));
+    }).slice(0,8);
   },[q,products]);
   if(!open)return null;
   return (
@@ -2229,8 +2196,10 @@ function Header({count, favCount, onCart, page, go, onSearch, settings, onNavTog
         <button className={page==='collection'?'active':''} onClick={()=>nav('collection')}>Koleksiyon</button>
         <button className={page==='story'?'active':''} onClick={()=>nav('story')}>Hikaye</button>
         <button className={page==='contact'?'active':''} onClick={()=>nav('contact')}>İletişim</button>
+        <button className={`navFavLink ${page==='favorites'?'active':''}`} onClick={()=>nav('favorites')}>Favoriler{favCount>0?` (${favCount})`:''}</button>
       </nav>
       <div className="headActions">
+        <button className={`cartRound favRound ${page==='favorites'?'active':''}`} onClick={()=>nav('favorites')} aria-label={favCount>0?`Favoriler (${favCount})`:'Favoriler'}><IHeart f={favCount>0}/>{favCount>0&&<b>{favCount}</b>}</button>
         <button className="cartRound" onClick={onCart} aria-label="Sepet"><ICart/>{count>0&&<b>{count}</b>}</button>
         <button className="orderBtn" onClick={()=>nav('contact')}>Sipariş Ver ↗</button>
         <button className={`hamb ${open?'hambOpen':''}`} onClick={()=>setOpen(!open)} aria-label={open?'Menüyü kapat':'Menüyü aç'} aria-expanded={open}><i/><i/><i/></button>
@@ -2686,7 +2655,9 @@ function App(){
     setToast(`${p.title} sepete eklendi`);
     toastTimer.current=setTimeout(()=>setToast(''),2200);
   };
-  const dec=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:x.qty-1}:x).filter(x=>x.qty>0));
+  // Adet en az 1'de kalır; ürünü kaldırmak için sepetteki çöp kutusu kullanılır.
+  const dec=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:Math.max(1,x.qty-1)}:x));
+  const removeItem=id=>setCart(items=>items.filter(x=>x.id!==id));
   const incQty=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:Math.min(99,x.qty+1)}:x));
   // Sipariş sunucuda oluşturulur; fiyatlar sunucuda güncel katalogdan hesaplanır.
   const createOrder=async(customer={})=>{
@@ -2709,7 +2680,7 @@ function App(){
       {page==='home'&&<Home add={add} go={go} goProduct={goProduct} products={products} allReviews={allReviews} favorites={favorites} toggleFav={toggleFav} settings={siteSettings}/>}
       {page==='collection'&&<main className="page"><Collection add={add} standalone goProduct={goProduct} products={products} allReviews={allReviews} favorites={favorites} toggleFav={toggleFav} cart={cart} onCart={()=>setDrawer(true)} settings={siteSettings}/></main>}
       {page==='story'&&<StoryPage go={go}/>}
-      {page==='contact'&&<ContactPage/>}
+      {page==='contact'&&<ContactPage settings={siteSettings}/>}
       {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go}/>}
       {page==='product'&&!currentProduct&&<main className="page productDetailPage"><p className="pageLoading">Ürün yükleniyor…</p></main>}
       {page==='product'&&currentProduct&&<ProductDetailPage product={currentProduct} go={go} add={add} allReviews={allReviews} setAllReviews={setAllReviews} favorites={favorites} toggleFav={toggleFav} products={products} recentIds={recentIds} settings={siteSettings}/>}
@@ -2720,10 +2691,10 @@ function App(){
     <>
       <Header page={page} go={go} count={cart.reduce((s,x)=>s+x.qty,0)} favCount={favorites.length} onCart={()=>setDrawer(true)} onSearch={()=>setSearchOpen(true)} settings={siteSettings} onNavToggle={setNavOpen}/>
       <PageTransition pageKey={page+(currentProduct?.id||'')}>{pageContent}</PageTransition>
-      <CartDrawer open={drawer} cart={cart} setOpen={setDrawer} inc={incQty} dec={dec} createOrder={createOrder} clearCart={()=>setCart([])} go={go}/>
+      <CartDrawer open={drawer} cart={cart} setOpen={setDrawer} inc={incQty} dec={dec} remove={removeItem} createOrder={createOrder} clearCart={()=>setCart([])} go={go}/>
       <SearchOverlay open={searchOpen} onClose={()=>setSearchOpen(false)} products={products} goProduct={goProduct}/>
       <BottomNav page={page} go={go} onSearch={()=>setSearchOpen(true)} onCart={()=>setDrawer(true)} favCount={favorites.length} cartCount={cart.reduce((s,x)=>s+x.qty,0)}/>
-      {toast&&<div className="toast" role="status">✓ {toast}</div>}
+      {toast&&<div className={`toast ${drawer?'toastTop':''}`} role="status">✓ {toast}</div>}
     </>
   );
 }
