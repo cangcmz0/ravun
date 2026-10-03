@@ -11662,3 +11662,400 @@ html body .galleryCard,
 html body .archiveCard{
   overflow:hidden !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   ÜRÜN DETAY — "ÜRÜN HAKKINDA" + YORUMLAR (v108)
+   Eski sekmeli akordeon, hikaye kartı, sertifika kartı ve "atölye
+   bilgisi" kartlarının yerini alan tek, sade bölüm.
+   ══════════════════════════════════════════════════════════════════ */
+.pdxDetails,
+.pdxReviews{
+  max-width:1360px;
+  margin:clamp(56px,7vw,96px) auto 0;
+}
+.pdxDetails{
+  display:grid;
+  grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);
+  gap:clamp(32px,5vw,80px);
+  align-items:start;
+  padding-top:clamp(40px,5vw,64px);
+  border-top:1px solid var(--rule-soft);
+}
+.pdxHead{ margin-bottom:22px; }
+.pdxHead p{
+  margin:0 0 10px;
+  font:700 11px/1 var(--sans);
+  letter-spacing:.22em;
+  color:var(--olive);
+}
+.pdxHead h2{
+  margin:0;
+  font:500 clamp(30px,3.4vw,44px)/1.08 var(--serif);
+  letter-spacing:-.01em;
+  color:var(--text-main);
+}
+.pdxStory > p{
+  margin:0 0 16px;
+  font:400 16px/1.75 var(--sans);
+  color:var(--lux-muted);
+  max-width:62ch;
+}
+.pdxStory > p.pdxLead{
+  font:400 clamp(19px,1.7vw,22px)/1.55 var(--serif);
+  color:var(--text-main);
+}
+.pdxStory > p.pdxNote{
+  font-size:14px;
+  font-style:italic;
+}
+.pdxSpecs{
+  margin:28px 0 0;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  border-top:1px solid var(--rule-soft);
+}
+.pdxSpecs > div{
+  padding:14px 0;
+  border-bottom:1px solid var(--rule-soft);
+  min-width:0;
+}
+.pdxSpecs > div:nth-child(odd){ padding-right:20px; }
+.pdxSpecs dt{
+  margin:0 0 4px;
+  font:700 10.5px/1.2 var(--sans);
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+}
+.pdxSpecs dd{
+  margin:0;
+  font:500 15px/1.45 var(--sans);
+  color:var(--text-main);
+  overflow-wrap:anywhere;
+}
+.pdxInfo{
+  border-top:1px solid var(--rule-soft);
+  margin-top:clamp(0px,4.6vw,66px);
+}
+.pdxInfo details{ border-bottom:1px solid var(--rule-soft); }
+.pdxInfo summary{
+  list-style:none;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:18px 0;
+  font:600 15px/1.35 var(--sans);
+  color:var(--text-main);
+}
+.pdxInfo summary::-webkit-details-marker{ display:none; }
+.pdxInfo summary::after{
+  content:'+';
+  flex:0 0 auto;
+  font:400 22px/1 var(--sans);
+  color:var(--muted);
+  transition:transform .25s var(--ease);
+}
+.pdxInfo details[open] summary::after{ transform:rotate(45deg); }
+.pdxInfo details > p,
+.pdxInfo details > ul{
+  margin:0 0 16px;
+  font:400 14.5px/1.7 var(--sans);
+  color:var(--lux-muted);
+}
+.pdxInfo details > ul{ padding-left:18px; }
+.pdxInfo details > ul li{ margin:0 0 6px; }
+.pdxInfo details > :last-child{ margin-bottom:20px; }
+.pdxReviews{
+  padding-top:clamp(40px,5vw,64px);
+  border-top:1px solid var(--rule-soft);
+}
+.pdxReviews .reviewSection{ margin:0; max-width:none; }
+@media (max-width:900px){
+  .pdxDetails{ grid-template-columns:1fr; gap:28px; }
+  .pdxInfo{ margin-top:0; }
+}
+@media (max-width:520px){
+  .pdxSpecs{ grid-template-columns:1fr; }
+  .pdxSpecs > div:nth-child(odd){ padding-right:0; }
+  .pdxStory > p{ font-size:15px; }
+}
+/* Mobil aksiyon satırı: eskiden ekranın altına sabitlenmeye çalışıyordu;
+   açılış animasyonunun transform'u yüzünden sayfanın ortasına düşüyor,
+   sabitlense de alt menünün altında kalıyordu. Artık seçeneklerin hemen
+   altında normal akışta: [Sepete Ekle] [WhatsApp simgesi] [Paylaş simgesi]. */
+@media (max-width:760px){
+  html body .productDetailPage .pdActions{
+    position:static !important;
+    margin:18px 0 6px !important;
+    padding:0 !important;
+    background:none !important;
+    backdrop-filter:none !important;
+    border:0 !important;
+    box-shadow:none !important;
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    gap:8px !important;
+  }
+  html body .productDetailPage .pdActions .pdAddBtn{ flex:1 1 auto !important; height:50px !important; }
+  html body .productDetailPage .pdActions .waModalBtn,
+  html body .productDetailPage .pdActions .shareBtn{
+    display:inline-flex !important;
+    align-items:center;
+    justify-content:center;
+    flex:0 0 50px !important;
+    width:50px !important;
+    height:50px !important;
+    padding:0 !important;
+    border-radius:12px !important;
+  }
+  html body .productDetailPage .pdActions .waModalBtn span,
+  html body .productDetailPage .pdActions .shareBtn span{ display:none !important; }
+  html body .productDetailPage .pdInfo{ padding-bottom:0 !important; }
+  /* Küçük ve çok yatay fotoğrafta üst üste binen ipucu yazısı gizli (dokunmak yeterli) */
+  html body .productDetailPage .pdZoomHint{ display:none !important; }
+}
+/* Yorum özeti: mobilde dağılım çubukları tam genişlik; büyük puanın
+   altındaki küçük tekrar sayı gizli */
+html body .reviewBigBlock .starNum{ display:none; }
+@media (max-width:640px){
+  html body .reviewOverview{ align-items:stretch; }
+  html body .reviewOverview .reviewBigBlock{ align-self:center; }
+  html body .reviewOverview .reviewBars{ width:100%; align-self:stretch; }
+}
+/* Masaüstünde galeri kaydırırken ekranda kalsın: sağ sütun uzunken
+   fotoğrafın altında büyük boşluk oluşmasın */
+@media (min-width:901px){
+  html body .productDetailPage .pdGallery{
+    position:sticky;
+    top:96px;
+    align-self:start;
+  }
+}
+
+/* ── Sayfa düzeltmeleri (v108) ── */
+/* Altbilgi: logo görseli kendi yüksekliğinde; sütunlar üstten hizalı */
+html body .footer{ align-items:start !important; }
+html body .footer > div:first-child{ display:flex !important; flex-direction:column; gap:14px; }
+/* Logo dosyası 344×351; yalnızca ortadaki ~260×82 alan dolu. Kutuyu o alana göre kırp. */
+html body .footer > div:first-child img{
+  width:170px !important;
+  height:54px !important;
+  max-width:none !important;
+  object-fit:cover !important;
+  object-position:center 53% !important;
+  margin:0 0 4px -8px !important;
+  padding:0 !important;
+}
+html body .footer > div:first-child p,
+html body .footer > div:first-child span{ margin:0 !important; }
+
+/* Hikaye > Atölye paleti: başlık sola hizalı tek blok; telefonda 2 sütun */
+html body .palette .sectionHead{ display:block !important; text-align:left !important; }
+html body .palette .sectionHead h2{ margin-top:10px !important; }
+@media (max-width:640px){
+  html body .paletteGrid{
+    display:grid !important;
+    grid-template-columns:repeat(2,minmax(0,1fr)) !important;
+    gap:10px !important;
+  }
+  html body .paletteGrid > div{ padding:16px 14px !important; min-height:0 !important; }
+  html body .paletteGrid h3{ font-size:18px !important; }
+  html body .paletteGrid p{ font-size:12.5px !important; line-height:1.45 !important; }
+}
+
+/* Üst menü: favoriler kalbi; menü içindeki Favoriler linki yalnızca açılır menüde */
+html body .header .favRound svg{ width:18px; height:18px; }
+html body .header .favRound.active{ border-color:var(--order-btn); }
+@media (min-width:901px){ html body .header .nav .navFavLink{ display:none !important; } }
+
+/* Açılır menüde 4. öğe (Favoriler) de görünür olsun (animasyon yalnızca ilk 3 için tanımlıydı) */
+html body .header .nav.open .navFavLink{ opacity:1 !important; transform:none !important; }
+/* Favori sayacı rozeti */
+html body .header .favRound b{
+  position:absolute !important;
+  top:-3px !important;
+  right:-3px !important;
+  min-width:18px !important;
+  height:18px !important;
+  padding:0 5px !important;
+  display:grid !important;
+  place-items:center !important;
+  border-radius:999px !important;
+  background:var(--order-btn) !important;
+  color:#fff !important;
+  font:700 10px/1 var(--sans) !important;
+  box-shadow:0 0 0 2px var(--bg-main) !important;
+}
+/* Favoriler sayfası ızgarası: telefonda tek, tablette iki, masaüstünde üç sütun */
+html body .favoritesBody .gridProducts{
+  display:grid !important;
+  grid-template-columns:repeat(3,minmax(0,1fr)) !important;
+  gap:22px !important;
+}
+@media (max-width:1000px){ html body .favoritesBody .gridProducts{ grid-template-columns:repeat(2,minmax(0,1fr)) !important; } }
+@media (max-width:640px){ html body .favoritesBody .gridProducts{ grid-template-columns:1fr !important; gap:16px !important; } }
+html body .favoritesBody .gridProducts .productCard{ width:auto !important; max-width:none !important; min-width:0 !important; }
+/* Sayaç rozetleri yuvarlak butonun dışına taşabilsin (kırpılmasın) */
+html body .header .cartRound{ overflow:visible !important; }
+/* Arama kutusu: hap içinde ikinci çerçeve görünmesin */
+html body .searchTop input{
+  border:0 !important;
+  outline:none !important;
+  box-shadow:none !important;
+  background:transparent !important;
+}
+html body .searchTop:focus-within{ box-shadow:0 0 0 2px rgba(105,207,176,.45) !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   SEPET ÇEKMECESİ (v108) — başlık / kaydırılan içerik / sabit alt kısım
+   ══════════════════════════════════════════════════════════════════ */
+html body .cartLayer .drawer.cx{
+  display:flex !important;
+  flex-direction:column !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  width:min(440px,100vw) !important;
+  height:100% !important;
+  top:0 !important;
+  bottom:0 !important;
+  left:auto !important;
+  right:0 !important;
+  border-radius:0 !important;
+  background:var(--bg-main) !important;
+  gap:0 !important;
+}
+.cx .cxHead{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:18px 20px;
+  border-bottom:1px solid var(--rule-soft);
+  background:var(--bg-card);
+  flex:0 0 auto;
+}
+.cx .cxHead > div{ flex:1; min-width:0; }
+.cx .cxHead h3{ margin:0; font:500 26px/1.1 var(--serif); color:var(--text-main); }
+.cx .cxHead small{ display:block; margin-top:3px; font:500 12.5px/1.3 var(--sans); color:var(--text-muted); }
+.cx .cxHeadIcon,
+.cx .cxBack,
+.cx .cxClose{
+  flex:0 0 40px; width:40px; height:40px; border-radius:50%;
+  display:grid; place-items:center;
+  border:1px solid var(--border); background:#fff8; color:var(--text-main);
+  padding:0; cursor:pointer;
+}
+.cx .cxHeadIcon{ cursor:default; background:var(--bg-soft); border-color:transparent; }
+.cx .cxHeadIcon svg,.cx .cxClose svg{ width:18px; height:18px; }
+.cx .cxBody{
+  flex:1 1 auto;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:16px 20px 20px;
+  -webkit-overflow-scrolling:touch;
+}
+.cx .cxFoot{
+  flex:0 0 auto;
+  padding:16px 20px calc(16px + env(safe-area-inset-bottom));
+  border-top:1px solid var(--rule-soft);
+  background:var(--bg-card);
+  display:flex; flex-direction:column; gap:10px;
+  box-shadow:0 -10px 30px rgba(43,33,21,.06);
+}
+/* Ürün listesi */
+.cx .cxItems{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px; }
+.cx .cxItem{
+  display:flex; gap:14px; padding:12px;
+  background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+}
+.cx .cxItem img{
+  flex:0 0 76px; width:76px !important; height:76px !important;
+  aspect-ratio:auto !important;
+  object-fit:cover !important; border-radius:12px; background:var(--bg-soft);
+}
+.cx .cxItemInfo{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+.cx .cxItemTop{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.cx .cxItemTop b{ font:600 14.5px/1.3 var(--sans); color:var(--text-main); }
+.cx .cxItemInfo small{ font:500 12px/1.4 var(--sans); color:var(--text-muted); }
+.cx .cxItemInfo .cxGift{ color:var(--olive-dark); }
+.cx .cxRemove{
+  flex:0 0 30px; width:30px; height:30px; border-radius:8px; border:0;
+  display:grid; place-items:center; background:transparent; color:var(--muted); cursor:pointer;
+}
+.cx .cxRemove:hover{ background:rgba(185,28,28,.08); color:#a23a2a; }
+.cx .cxItemBottom{ margin-top:auto; padding-top:6px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.cx .cxItemBottom strong{ font:600 15px/1 var(--sans); color:var(--text-main); white-space:nowrap; }
+.cx .cxQty{ display:inline-flex; align-items:center; border:1px solid var(--border); border-radius:999px; background:#fff8; }
+.cx .cxQty button{
+  width:32px; height:32px; border:0; background:transparent; cursor:pointer;
+  font:500 18px/1 var(--sans); color:var(--text-main); border-radius:999px;
+}
+.cx .cxQty button:disabled{ opacity:.3; cursor:default; }
+.cx .cxQty span{ min-width:22px; text-align:center; font:600 14px/1 var(--sans); }
+/* Toplamlar ve butonlar */
+.cx .cxLine,.cx .cxTotal{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+.cx .cxLine{ font:500 13px/1.3 var(--sans); color:var(--text-muted); }
+.cx .cxTotal span{ font:600 13px/1 var(--sans); letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted); }
+.cx .cxTotal b{ font:500 28px/1 var(--serif); color:var(--text-main); }
+.cx .cxBtn{
+  display:flex; align-items:center; justify-content:center; gap:8px;
+  width:100%; height:52px; border:0; border-radius:14px; cursor:pointer;
+  background:var(--text-main); color:#fff;
+  font:700 14px/1 var(--sans); letter-spacing:.02em; text-decoration:none;
+  transition:background .2s, transform .2s;
+}
+.cx .cxBtn:hover{ background:#3d3020; }
+.cx .cxBtn:disabled{ opacity:.6; cursor:wait; }
+.cx .cxBtnWa{ background:#1f8a5b; }
+.cx .cxBtnWa:hover{ background:#197a50; }
+.cx .cxBtnGhost{ background:transparent; color:var(--text-main); border:1px solid var(--border); }
+.cx .cxBtnGhost:hover{ background:var(--bg-soft); }
+.cx .cxBtn svg{ width:18px; height:18px; }
+.cx .cxLink{
+  display:flex; align-items:center; justify-content:center; gap:6px;
+  font:600 13px/1 var(--sans); color:#1f8a5b; text-decoration:none; padding:6px 0;
+}
+.cx .cxLink svg{ width:15px; height:15px; }
+.cx .cxFine{ text-align:center; font:500 11.5px/1.45 var(--sans); color:var(--text-muted); }
+/* Bilgi formu */
+.cx .cxIntro{ margin:0 0 16px; font:400 14px/1.6 var(--sans); color:var(--text-muted); }
+.cx .cxField{ display:flex; flex-direction:column; gap:6px; margin:0 0 14px; }
+.cx .cxField > span{ font:700 11px/1 var(--sans); letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); }
+.cx .cxField input,.cx .cxField textarea{
+  width:100%; box-sizing:border-box; border:1px solid var(--border); border-radius:12px;
+  background:#fffdf8; padding:13px 14px; font:500 16px/1.35 var(--sans); color:var(--text-main);
+  outline:none; resize:vertical;
+}
+.cx .cxField input:focus,.cx .cxField textarea:focus{ border-color:var(--green-soft); box-shadow:0 0 0 3px rgba(105,207,176,.25); }
+.cx .cxInvalid input{ border-color:#c0614b; }
+.cx .cxField em{ font:500 12px/1.3 var(--sans); font-style:normal; color:#a23a2a; }
+.cx .cxChips{ display:flex; flex-wrap:wrap; gap:6px; }
+.cx .cxChips button{
+  border:1px solid var(--border); background:var(--bg-card); color:var(--text-main);
+  border-radius:999px; padding:7px 11px; font:600 12px/1 var(--sans); cursor:pointer;
+}
+.cx .cxError{
+  margin-top:4px; padding:12px 14px; border-radius:12px;
+  background:rgba(185,28,28,.07); border:1px solid rgba(185,28,28,.2);
+}
+.cx .cxError p{ margin:0 0 8px; font:500 13px/1.45 var(--sans); color:#8f1d1d; }
+.cx .cxError a{ display:inline-flex; align-items:center; gap:6px; font:700 13px/1 var(--sans); color:#1f8a5b; text-decoration:none; }
+.cx .cxError a svg{ width:15px; height:15px; }
+/* Boş sepet ve onay ekranı */
+.cx .cxEmpty,.cx .cxDone{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:12px; padding:40px 28px; }
+.cx .cxEmptyIcon,.cx .cxDoneIcon{ width:64px; height:64px; border-radius:50%; display:grid; place-items:center; background:var(--bg-soft); color:var(--text-main); }
+.cx .cxDoneIcon{ background:rgba(31,138,91,.12); color:#1f8a5b; }
+.cx .cxEmptyIcon svg,.cx .cxDoneIcon svg{ width:26px; height:26px; }
+.cx .cxEmpty h4,.cx .cxDone h4{ margin:4px 0 0; font:500 26px/1.15 var(--serif); color:var(--text-main); }
+.cx .cxEmpty p,.cx .cxDone p{ margin:0 0 8px; font:400 14px/1.6 var(--sans); color:var(--text-muted); max-width:32ch; }
+.cx .cxOrderNo{ width:100%; padding:14px; border-radius:14px; border:1px dashed var(--border); background:var(--bg-card); margin-bottom:6px; }
+.cx .cxOrderNo small{ display:block; font:700 10.5px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px; }
+.cx .cxOrderNo b{ font:600 20px/1 var(--sans); letter-spacing:.04em; color:var(--text-main); }
+@media (max-width:520px){
+  .cx .cxHead{ padding:14px 16px; }
+  .cx .cxBody{ padding:14px 16px 18px; }
+  .cx .cxFoot{ padding:14px 16px calc(14px + env(safe-area-inset-bottom)); }
+}
+/* Sepet açıkken bildirim alttaki butonların üstüne binmesin */
+html body .toast.toastTop{ top:16px !important; bottom:auto !important; z-index:300 !important; }

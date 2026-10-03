@@ -105,6 +105,9 @@ npm run dev               # site + panel + API birlikte (Vite içinde)
   Vercel + Neon üzerinde ilk kurulumdan sonra `/api/health` ile doğrulanmalı.
 
 ## Bilinen eksikler / sonraki adımlar
+- **Sıradaki iş (kullanıcı isteği):** Admin panelinde düzenlemeyi kolaylaştırmak — ürün
+  sırasını sürükle-bırak ile değiştirme, ürün fotoğraflarını sürükleyerek yükleme /
+  sıralama / kaldırma gibi elle yönetimi rahatlatan araçlar.
 - `scripts/prerender.mjs` SEO önizleme sayfalarını hâlâ `src/data/products.json`'dan
   üretiyor. Panelden eklenen yeni ürünler normal çalışır ama paylaşım
   önizlemesi (og:image vb.) genel site bilgisini gösterir.
