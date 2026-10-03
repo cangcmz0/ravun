@@ -1,7 +1,17 @@
 {
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{src/data/products.json,server/**}",
+      "maxDuration": 15
+    }
+  },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
+      "destination": "/api/index?__path=$1"
+    },
+    {
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ],

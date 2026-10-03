@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Clock, Package, ShoppingBag, Star, Wallet } from 'lucide-react'
-import {
-  loadOrders,
-  loadProducts,
-  loadReviews,
-  money,
-  orderTotal,
-} from '@/lib/ravun-data'
+import { Link } from '@tanstack/react-router'
+import { Clock, Mail, MessageSquare, Package, Star, Wallet } from 'lucide-react'
+import { money, orderTotal } from '@/lib/ravun-data'
+import { errorMessage, fetchMessages, fetchOrders, fetchProducts, fetchReviews } from '@/lib/api'
 import {
   Card,
   CardContent,
@@ -22,6 +18,7 @@ import { TopNav } from '@/components/layout/top-nav'
 import { ProfileDropdown } from '@/components/profile-dropdown'
 import { Search } from '@/components/search'
 import { ThemeSwitch } from '@/components/theme-switch'
+import { LegacyImportCard } from './components/legacy-import-card'
 import { Overview } from './components/overview'
 import { RecentSales } from './components/recent-sales'
 
@@ -31,12 +28,15 @@ export function Dashboard() {
   const [products, setProducts] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
   const [reviews, setReviews] = useState<Record<string, any[]>>({})
+  const [messages, setMessages] = useState<any[]>([])
+  const [loadError, setLoadError] = useState('')
 
-  useEffect(() => {
-    setProducts(loadProducts())
-    setOrders(loadOrders())
-    setReviews(loadReviews())
-  }, [])
+  const load = () => {
+    Promise.all([fetchProducts(), fetchOrders(), fetchReviews(), fetchMessages()])
+      .then(([p, o, r, m]) => { setProducts(p); setOrders(o); setReviews(r); setMessages(m); setLoadError('') })
+      .catch((err) => setLoadError(errorMessage(err, 'Panel verileri yüklenemedi.')))
+  }
+  useEffect(load, [])
 
   const visibleProducts = useMemo(
     () => products.filter((p) => p.visible !== false).length,
@@ -52,10 +52,12 @@ export function Dashboard() {
   )
   const reviewStats = useMemo(() => {
     const flat = Object.values(reviews).flat() as any[]
-    const total = flat.length
-    const avg = total ? flat.reduce((s, r) => s + (Number(r.rating) || 0), 0) / total : 0
-    return { total, avg }
+    const approved = flat.filter((r) => r.approved)
+    const total = approved.length
+    const avg = total ? approved.reduce((s, r) => s + (Number(r.rating) || 0), 0) / total : 0
+    return { total, avg, pending: flat.length - approved.length }
   }, [reviews])
+  const unreadMessages = useMemo(() => messages.filter((m) => !m.read).length, [messages])
 
   return (
     <>
@@ -73,6 +75,24 @@ export function Dashboard() {
         <div className='mb-2 flex items-center justify-between space-y-2'>
           <h1 className='text-2xl font-bold tracking-tight'>Panel</h1>
         </div>
+        {loadError && (
+          <p className='mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive'>{loadError}</p>
+        )}
+        <LegacyImportCard onImported={load} />
+        {(reviewStats.pending > 0 || unreadMessages > 0) && (
+          <div className='mb-4 flex flex-wrap gap-2'>
+            {reviewStats.pending > 0 && (
+              <Link to='/reviews' className='inline-flex items-center gap-2 rounded-md border bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200'>
+                <MessageSquare className='size-4' /> {reviewStats.pending} yorum onay bekliyor
+              </Link>
+            )}
+            {unreadMessages > 0 && (
+              <Link to='/messages' className='inline-flex items-center gap-2 rounded-md border bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-900/30 dark:text-blue-200'>
+                <Mail className='size-4' /> {unreadMessages} okunmamış mesaj
+              </Link>
+            )}
+          </div>
+        )}
         <Tabs
           orientation='vertical'
           defaultValue='overview'
@@ -145,7 +165,7 @@ export function Dashboard() {
                     {reviewStats.total ? reviewStats.avg.toFixed(1) : '—'}
                   </div>
                   <p className='text-muted-foreground text-xs'>
-                    {reviewStats.total} yorum
+                    {reviewStats.total} yayında yorum
                   </p>
                 </CardContent>
               </Card>
@@ -156,7 +176,7 @@ export function Dashboard() {
                   <CardTitle>Aylık Ciro</CardTitle>
                 </CardHeader>
                 <CardContent className='ps-2'>
-                  <Overview />
+                  <Overview orders={orders} />
                 </CardContent>
               </Card>
               <Card className='col-span-1 lg:col-span-3'>
@@ -169,7 +189,7 @@ export function Dashboard() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <RecentSales />
+                  <RecentSales orders={orders} />
                 </CardContent>
               </Card>
             </div>

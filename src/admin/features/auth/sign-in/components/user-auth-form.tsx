@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Loader2, Lock, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
-import {
-  getLockedUntil,
-  getLoginAttempts,
-  registerFailedAttempt,
-  clearLoginAttempts,
-  MAX_LOGIN_ATTEMPTS,
-} from '@/lib/ravun-data'
+import { ApiError, getSession } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -22,10 +16,16 @@ interface UserAuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
 export function UserAuthForm({ className, redirectTo, ...props }: UserAuthFormProps) {
   const [pin, setPin] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [lockedUntil, setLockedUntil] = useState(() => getLockedUntil())
+  const [lockedUntil, setLockedUntil] = useState(0)
+  const [remainingTries, setRemainingTries] = useState<number | null>(null)
+  const [configured, setConfigured] = useState(true)
   const [now, setNow] = useState(() => Date.now())
   const navigate = useNavigate()
   const login = useAuthStore((s) => s.login)
+
+  useEffect(() => {
+    getSession().then((s) => setConfigured(s.configured)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!lockedUntil) return
@@ -35,7 +35,6 @@ export function UserAuthForm({ className, redirectTo, ...props }: UserAuthFormPr
 
   const locked = lockedUntil > now
   const remaining = Math.max(0, Math.ceil((lockedUntil - now) / 1000))
-  const attempts = getLoginAttempts()
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -45,21 +44,24 @@ export function UserAuthForm({ className, redirectTo, ...props }: UserAuthFormPr
       return
     }
     setIsLoading(true)
-    const ok = await login(pin)
-    setIsLoading(false)
-    if (ok) {
-      clearLoginAttempts()
+    try {
+      await login(pin)
       toast.success('Giriş başarılı, hoş geldiniz.')
       navigate({ to: redirectTo || '/', replace: true })
-    } else {
-      const { attempts: n, lockedUntil: until } = registerFailedAttempt()
+    } catch (err) {
       setPin('')
-      if (until) {
-        setLockedUntil(until)
+      if (err instanceof ApiError && err.status === 429) {
+        setLockedUntil(Date.now() + (Number(err.data?.retryAfter) || 60) * 1000)
+        setNow(Date.now())
         toast.error('Çok fazla hatalı deneme. Bir süre bekleyin.')
+      } else if (err instanceof ApiError && err.status === 401) {
+        setRemainingTries(Number(err.data?.remaining ?? 0))
+        toast.error(`Hatalı PIN. Kalan deneme: ${err.data?.remaining ?? 0}`)
       } else {
-        toast.error(`Hatalı PIN. Kalan deneme: ${MAX_LOGIN_ATTEMPTS - n}`)
+        toast.error(err instanceof Error ? err.message : 'Giriş yapılamadı.')
       }
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -71,27 +73,29 @@ export function UserAuthForm({ className, redirectTo, ...props }: UserAuthFormPr
           id='pin'
           type='password'
           inputMode='numeric'
-          autoComplete='off'
+          autoComplete='current-password'
           placeholder='••••••'
           value={pin}
-          disabled={locked || isLoading}
+          disabled={locked || isLoading || !configured}
           onChange={(e) => setPin(e.target.value)}
           autoFocus
         />
       </div>
 
-      {locked ? (
+      {!configured ? (
+        <p className='rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive'>
+          Sunucuda yönetici PIN'i tanımlı değil. Vercel ortam değişkenlerine <code>ADMIN_PIN</code> ekleyip yeniden dağıtın.
+        </p>
+      ) : locked ? (
         <p className='flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive'>
           <Lock className='size-4 shrink-0' />
-          Çok fazla hatalı deneme yapıldı. {remaining} saniye sonra tekrar deneyin.
+          Çok fazla hatalı deneme yapıldı. {Math.ceil(remaining / 60)} dakika sonra tekrar deneyin.
         </p>
-      ) : attempts > 0 ? (
-        <p className='text-sm text-muted-foreground'>
-          Kalan deneme hakkı: {MAX_LOGIN_ATTEMPTS - attempts}
-        </p>
+      ) : remainingTries !== null ? (
+        <p className='text-sm text-muted-foreground'>Kalan deneme hakkı: {remainingTries}</p>
       ) : null}
 
-      <Button className='mt-1' disabled={locked || isLoading}>
+      <Button className='mt-1' disabled={locked || isLoading || !configured}>
         {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
         Giriş yap
       </Button>

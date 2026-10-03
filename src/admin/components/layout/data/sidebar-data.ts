@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  Mail,
   Package,
   ShoppingBag,
   Star,
@@ -43,6 +44,11 @@ export const sidebarData: SidebarData = {
           title: 'Yorumlar',
           url: '/reviews',
           icon: Star,
+        },
+        {
+          title: 'Mesajlar',
+          url: '/messages',
+          icon: Mail,
         },
       ],
     },

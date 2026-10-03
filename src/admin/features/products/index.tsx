@@ -4,11 +4,10 @@ import { Eye, EyeOff, ImageOff, Pencil, Plus, Search, Trash2 } from 'lucide-reac
 import {
   CATEGORIES,
   PRODUCT_STATUS,
-  loadProducts,
   money,
   normalizeProductStatus,
-  saveProducts,
 } from '@/lib/ravun-data'
+import { errorMessage, fetchProducts, saveProducts } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -57,18 +56,28 @@ export function Products() {
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
+  const [loadError, setLoadError] = useState('')
+
   useEffect(() => {
-    setProducts(loadProducts())
-    setLoaded(true)
+    fetchProducts()
+      .then(setProducts)
+      .catch((err) => setLoadError(errorMessage(err, 'Ürünler yüklenemedi.')))
+      .finally(() => setLoaded(true))
   }, [])
 
-  const persist = (next: any[]) => {
+  // Değişiklik ekranda hemen görünür, ardından sunucuya kaydedilir; kayıt
+  // başarısız olursa önceki hale geri dönülür.
+  const persist = async (next: any[]) => {
+    const prev = products
     setProducts(next)
-    const ok = saveProducts(next)
-    if (!ok) {
-      toast.error('Kaydedilemedi: depolama alanı doldu. Bazı ürünlerdeki görselleri azaltıp tekrar deneyin.')
+    try {
+      setProducts(await saveProducts(next))
+      return true
+    } catch (err) {
+      setProducts(prev)
+      toast.error(`Kaydedilemedi: ${errorMessage(err)}`)
+      return false
     }
-    return ok
   }
 
   const sorted = useMemo(
@@ -96,10 +105,10 @@ export function Products() {
   const openAdd = () => { setEditing(null); setDialogOpen(true) }
   const openEdit = (p: any) => { setEditing(p); setDialogOpen(true) }
 
-  const handleSave = (payload: any) => {
+  const handleSave = async (payload: any) => {
     const isEdit = products.some((p) => p.id === payload.id)
     const next = isEdit ? products.map((p) => (p.id === payload.id ? payload : p)) : [...products, payload]
-    const ok = persist(next)
+    const ok = await persist(next)
     if (ok) {
       toast.success(isEdit ? `${payload.title} güncellendi` : `${payload.title} eklendi`)
       setEditing(null)
@@ -107,23 +116,24 @@ export function Products() {
     return ok
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return
-    persist(products.filter((p) => p.id !== deleteTarget.id))
-    toast.success(`${deleteTarget.title} silindi`)
-    setSelected((s) => s.filter((id) => id !== deleteTarget.id))
+    const target = deleteTarget
     setDeleteTarget(null)
+    if (!(await persist(products.filter((p) => p.id !== target.id)))) return
+    toast.success(`${target.title} silindi`)
+    setSelected((s) => s.filter((id) => id !== target.id))
   }
 
-  const handleBulkDelete = () => {
-    persist(products.filter((p) => !selected.includes(p.id)))
+  const handleBulkDelete = async () => {
+    setBulkDeleteOpen(false)
+    if (!(await persist(products.filter((p) => !selected.includes(p.id))))) return
     toast.success(`${selected.length} ürün silindi`)
     setSelected([])
-    setBulkDeleteOpen(false)
   }
 
-  const handleBulkVisibility = (visible: boolean) => {
-    persist(products.map((p) => (selected.includes(p.id) ? { ...p, visible } : p)))
+  const handleBulkVisibility = async (visible: boolean) => {
+    if (!(await persist(products.map((p) => (selected.includes(p.id) ? { ...p, visible } : p))))) return
     toast.success(visible ? 'Seçilenler görünür yapıldı' : 'Seçilenler gizlendi')
   }
 
@@ -158,7 +168,7 @@ export function Products() {
         <div className='mb-4 flex flex-wrap items-center justify-between gap-2'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Ürünler</h1>
-            <p className='text-muted-foreground text-sm'>{products.length} ürün · site ile aynı veriyi kullanır</p>
+            <p className='text-muted-foreground text-sm'>{products.length} ürün · değişiklikler sitede yaklaşık 30 sn içinde görünür</p>
           </div>
           <Button onClick={openAdd}><Plus className='me-1 size-4' /> Yeni Ürün</Button>
         </div>
@@ -204,6 +214,8 @@ export function Products() {
             <TableBody>
               {!loaded ? (
                 <TableRow><TableCell colSpan={9} className='text-muted-foreground py-10 text-center'>Yükleniyor…</TableCell></TableRow>
+              ) : loadError ? (
+                <TableRow><TableCell colSpan={9} className='text-destructive py-10 text-center'>{loadError}</TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={9} className='text-muted-foreground py-10 text-center'>Ürün bulunamadı.</TableCell></TableRow>
               ) : filtered.map((p, i) => {
@@ -260,7 +272,6 @@ export function Products() {
         nextId={nextId}
         nextSortOrder={nextSortOrder}
         onSave={handleSave}
-        allProducts={products}
       />
 
       <ConfirmDialog

@@ -4924,7 +4924,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
   border:1px solid rgba(83,99,69,.22) !important;
 }
 @media (max-width:390px) {
-  .checkoutDrawer 
   .checkoutDrawer .cartItem img{
     width:74px !important;
     height:74px !important;
@@ -4939,7 +4938,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
     font-size:9px !important;
   }
 }
-.collectionFull .collectionFull .cardMedia{
+.collectionFull .cardMedia{
   aspect-ratio:1/1;
   background:linear-gradient(135deg,#f2eadc,#fffaf1);
   display:grid;
@@ -5498,8 +5497,7 @@ img[class]{
     aspect-ratio:1/1 !important;
     min-height:0 !important;
   }
-  .collectionFull 
-  .productInfo{
+  .collectionFull .productInfo{
     padding:18px !important;
   }
   .footer{
@@ -8214,7 +8212,7 @@ body{
   .checkoutSteps{
     padding:0 14px;
   }
-  .checkoutDrawer .checkoutDrawer .cartItem img{
+  .checkoutDrawer .cartItem img{
     width:86px !important;
     height:86px !important;
   }
@@ -8380,7 +8378,7 @@ body{
   .brandPillar h3{
     font-size:19px;
   }
-  .collectionFull .collectionFull .cardMedia,.collectionFull .photoWrap{
+  .collectionFull .cardMedia,.collectionFull .photoWrap{
     aspect-ratio:1/1 !important;
   }
   .collectionFull .productInfo{
@@ -11531,4 +11529,25 @@ body.modal-open{
   .pdCareCard.pdMaterialCard{
     grid-template-columns:1fr;
   }
+}
+
+/* ── Sunucu bağlantısı: hata ve yükleniyor durumları ── */
+.reviewError,
+.orderError{
+  margin:8px 0 0;
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(185,28,28,.08);
+  border:1px solid rgba(185,28,28,.22);
+  color:#8f1d1d;
+  font-size:13px;
+  line-height:1.45;
+}
+.pageLoading{
+  min-height:50vh;
+  display:grid;
+  place-items:center;
+  color:var(--text-muted, #7a6f5f);
+  font-size:15px;
+  letter-spacing:.04em;
 }

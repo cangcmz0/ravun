@@ -1,32 +1,31 @@
 import { create } from 'zustand'
-import {
-  isValidAdminSession,
-  createAdminSession,
-  clearAdminSession,
-  verifyAdminPin,
-} from '@/lib/ravun-data'
+import { getSession, login as apiLogin, logout as apiLogout } from '@/lib/api'
 
+// Oturum sunucuda HttpOnly çerezle tutulur; burası yalnızca arayüz durumunu yansıtır.
 interface AuthState {
   isAuthed: boolean
-  login: (pin: string) => Promise<boolean>
-  logout: () => void
-  refresh: () => void
+  login: (pin: string) => Promise<void>
+  logout: () => Promise<void>
+  refresh: () => Promise<boolean>
 }
 
 export const useAuthStore = create<AuthState>()((set) => ({
-  isAuthed: isValidAdminSession(),
+  isAuthed: false,
   login: async (pin: string) => {
-    const ok = await verifyAdminPin(pin)
-    if (ok) {
-      createAdminSession()
-      set({ isAuthed: true })
-      return true
+    await apiLogin(pin)
+    set({ isAuthed: true })
+  },
+  logout: async () => {
+    try { await apiLogout() } finally { set({ isAuthed: false }) }
+  },
+  refresh: async () => {
+    try {
+      const { authed } = await getSession()
+      set({ isAuthed: authed })
+      return authed
+    } catch {
+      set({ isAuthed: false })
+      return false
     }
-    return false
   },
-  logout: () => {
-    clearAdminSession()
-    set({ isAuthed: false })
-  },
-  refresh: () => set({ isAuthed: isValidAdminSession() }),
 }))

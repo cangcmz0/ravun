@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Eye, EyeOff, MessageSquareOff, Search, Star, Trash2 } from 'lucide-react'
-import { loadProducts, loadReviews, saveReviews } from '@/lib/ravun-data'
+import { deleteReview, errorMessage, fetchProducts, fetchReviews, setReviewApproved } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -57,17 +57,27 @@ export function Reviews() {
   const [deleteTarget, setDeleteTarget] = useState<FlatReview | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
+  const [loadError, setLoadError] = useState('')
+
   useEffect(() => {
-    setReviews(loadReviews())
-    const products = loadProducts()
-    setProductMap(Object.fromEntries(products.map((p: any) => [String(p.id), p])))
-    setLoaded(true)
+    Promise.all([fetchReviews(), fetchProducts()])
+      .then(([r, products]) => {
+        setReviews(r)
+        setProductMap(Object.fromEntries(products.map((p: any) => [String(p.id), p])))
+      })
+      .catch((err) => setLoadError(errorMessage(err, 'Yorumlar yüklenemedi.')))
+      .finally(() => setLoaded(true))
   }, [])
 
-  const persist = (next: Record<string, any[]>) => {
-    setReviews(next)
-    saveReviews(next)
-  }
+  // Sunucu işlemi başarılı olunca yerel listeyi günceller.
+  const applyLocal = (ids: Set<string>, fn: (r: any) => any | null) =>
+    setReviews((prev) => {
+      const next: Record<string, any[]> = {}
+      for (const [pid, list] of Object.entries(prev)) {
+        next[pid] = (list || []).map((r) => (ids.has(`${pid}:${r.id}`) ? fn(r) : r)).filter(Boolean)
+      }
+      return next
+    })
 
   const flat = useMemo<FlatReview[]>(() => {
     const rows: FlatReview[] = []
@@ -103,42 +113,51 @@ export function Reviews() {
   }
   const toggleSelect = (k: string) => setSelected((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]))
 
-  const toggleApproved = (r: FlatReview) => {
-    persist({
-      ...reviews,
-      [r.productId]: (reviews[r.productId] || []).map((x) => (x.id === r.id ? { ...x, approved: !x.approved } : x)),
-    })
+  const toggleApproved = async (r: FlatReview) => {
+    try {
+      await setReviewApproved(Number(r.id), !r.approved)
+      applyLocal(new Set([key(r)]), (x) => ({ ...x, approved: !x.approved }))
+    } catch (err) {
+      toast.error(`Güncellenemedi: ${errorMessage(err)}`)
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return
-    persist({
-      ...reviews,
-      [deleteTarget.productId]: (reviews[deleteTarget.productId] || []).filter((x) => x.id !== deleteTarget.id),
-    })
-    toast.success('Yorum silindi')
-    setSelected((s) => s.filter((k) => k !== key(deleteTarget)))
+    const target = deleteTarget
     setDeleteTarget(null)
+    try {
+      await deleteReview(Number(target.id))
+      applyLocal(new Set([key(target)]), () => null)
+      setSelected((s) => s.filter((k) => k !== key(target)))
+      toast.success('Yorum silindi')
+    } catch (err) {
+      toast.error(`Silinemedi: ${errorMessage(err)}`)
+    }
   }
 
-  const handleBulkVisibility = (approved: boolean) => {
-    const next = { ...reviews }
-    Object.keys(next).forEach((pid) => {
-      next[pid] = (next[pid] || []).map((r) => (selected.includes(`${pid}:${r.id}`) ? { ...r, approved } : r))
-    })
-    persist(next)
-    toast.success(approved ? 'Seçilenler onaylandı' : 'Seçilenler gizlendi')
+  const runBulk = async (op: (id: number) => Promise<void>) => {
+    const ids = new Set(selected)
+    const done = new Set<string>()
+    for (const k of ids) {
+      try { await op(Number(k.split(':')[1])); done.add(k) } catch { /* aşağıda raporlanır */ }
+    }
+    if (done.size < ids.size) toast.error(`${ids.size - done.size} yorum işlenemedi.`)
+    return done
   }
 
-  const handleBulkDelete = () => {
-    const next = { ...reviews }
-    Object.keys(next).forEach((pid) => {
-      next[pid] = (next[pid] || []).filter((r) => !selected.includes(`${pid}:${r.id}`))
-    })
-    persist(next)
-    toast.success(`${selected.length} yorum silindi`)
-    setSelected([])
+  const handleBulkVisibility = async (approved: boolean) => {
+    const done = await runBulk((id) => setReviewApproved(id, approved))
+    applyLocal(done, (r) => ({ ...r, approved }))
+    if (done.size) toast.success(approved ? 'Seçilenler onaylandı' : 'Seçilenler gizlendi')
+  }
+
+  const handleBulkDelete = async () => {
     setBulkDeleteOpen(false)
+    const done = await runBulk((id) => deleteReview(id))
+    applyLocal(done, () => null)
+    if (done.size) toast.success(`${done.size} yorum silindi`)
+    setSelected((s) => s.filter((k) => !done.has(k)))
   }
 
   const productOptions = useMemo(
@@ -180,7 +199,7 @@ export function Reviews() {
             <SelectContent>
               <SelectItem value='Tümü'>Tüm durumlar</SelectItem>
               <SelectItem value='onayli'>Onaylı</SelectItem>
-              <SelectItem value='beklemede'>Gizli</SelectItem>
+              <SelectItem value='beklemede'>Onay bekleyen / gizli</SelectItem>
             </SelectContent>
           </Select>
           {selected.length > 0 && (
@@ -213,6 +232,8 @@ export function Reviews() {
             <TableBody>
               {!loaded ? (
                 <TableRow><TableCell colSpan={9} className='text-muted-foreground py-10 text-center'>Yükleniyor…</TableCell></TableRow>
+              ) : loadError ? (
+                <TableRow><TableCell colSpan={9} className='text-destructive py-10 text-center'>{loadError}</TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={9} className='text-muted-foreground py-10 text-center'>

@@ -9,105 +9,13 @@ const SITE_URL = ENV.VITE_SITE_URL || 'https://ravun-tau.vercel.app';
 const WA_NUMBER = ENV.VITE_WHATSAPP_NUMBER || '905375614967';
 const WA_EMAIL = ENV.VITE_CONTACT_EMAIL || 'atolye@ravun.com.tr';
 const WA_DISPLAY = `+${WA_NUMBER.replace(/^(\d{2})(\d{3})(\d{3})(\d{2})(\d{2})$/, '$1 $2 $3 $4 $5')}`;
-const API_URL = ENV.VITE_API_URL || '';
-const IS_PROD = ENV.MODE === 'production';
-/* ── GÜVENLİK KATMANI ──
-   Not: Frontend tabanlı PIN sadece geçici yerel korumadır. VPS aşamasında backend auth'a bağlanacak şekilde yapı ayrılmıştır.
-   PIN hash'i kaynak koduna gömülmemeli; .env dosyasından VITE_ADMIN_PIN_HASH ile sağlanmalıdır.
-   Üretim adımları: 1) Güçlü bir PIN seçin (min. 8 karakter).
-                    2) Hash üretin: node -e "const c=require('crypto');console.log(c.createHash('sha256').update('ravun-local-admin-v2:PININIZ').digest('hex'))"
-                    3) Çıktıyı .env dosyasına VITE_ADMIN_PIN_HASH=<hash> olarak ekleyin. */
-const ADMIN_PIN_SHA256 = ENV.VITE_ADMIN_PIN_HASH || '';
-if (!ADMIN_PIN_SHA256) {
-  console.error('[Ravun] VITE_ADMIN_PIN_HASH tanımlanmamış — .env dosyasını kontrol edin. Admin girişi devre dışı.');
-}
-/* BULGU DÜZELTMESİ: panelde "(1234)" gibi PIN'i sabit metin olarak göstermek,
-   PIN her değiştiğinde yanlış/eski bilgi göstermeye devam ederdi (ve panelde
-   gerçek PIN'i asla göstermemeliyiz zaten). Bunun yerine yalnızca "hâlâ bilinen
-   zayıf varsayılan PIN mi" diye kontrol ediyoruz — hash'i karşılaştırıyoruz,
-   PIN'in kendisini hiçbir yerde tutmuyoruz. */
-const KNOWN_WEAK_DEFAULT_PIN_HASH = '32456b37e2f184491ff7824b906b0f04fd2327eb36f39c5c50bb7f241be9f061'; // "1234"
-const ADMIN_PIN_IS_DEFAULT = ADMIN_PIN_SHA256 === KNOWN_WEAK_DEFAULT_PIN_HASH;
-const ADMIN_PIN_SALT = 'ravun-local-admin-v2';
+/* Admin paneli (PIN doğrulama, oturum) src/admin/lib/ravun-data.ts içinde yaşar.
+   Site tarafında yalnızca hata ekranındaki "önbelleği temizle" için oturum
+   anahtarlarını silen yardımcı kalır. */
 const ADMIN_SESSION_KEY = 'ravun:adm_s';
 const ADMIN_LOCK_KEY = 'ravun:adm_l';
 const ADMIN_ATTEMPT_KEY = 'ravun:adm_a';
 const ADMIN_TOKEN_KEY = 'ravun:adm_t';
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCK_DURATION_MS = 60000; // 60 saniye (30'dan artırıldı)
-const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 saat
-async function sha256Hex(value) {
-  const bytes = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,'0')).join('');
-}
-function timingSafeEqual(a, b) {
-  const aa = String(a || '');
-  const bb = String(b || '');
-  let out = aa.length ^ bb.length;
-  const len = Math.max(aa.length, bb.length);
-  for (let i = 0; i < len; i++) out |= (aa.charCodeAt(i) || 0) ^ (bb.charCodeAt(i) || 0);
-  return out === 0;
-}
-/* PIN doğrulama — hash karşılaştırması */
-async function verifyAdminPin(inputPin) {
-  try {
-    if (!ADMIN_PIN_SHA256) return false; // hash yapılandırılmamışsa girişe izin verme
-    const normalized = String(inputPin || '').trim().slice(0, 32);
-    if (!normalized) return false;
-    const digest = await sha256Hex(`${ADMIN_PIN_SALT}:${normalized}`);
-    return timingSafeEqual(digest, ADMIN_PIN_SHA256);
-  } catch {
-    return false;
-  }
-}
-/* Token üretimi — oturum için rastgele imzalı token */
-function generateSessionToken() {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-/* Oturum geçerlilik kontrolü */
-function isValidAdminSession() {
-  try {
-    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY);
-    if (!raw) return false;
-    const session = JSON.parse(atob(raw));
-    if (!session.token || !session.exp || !session.fingerprint) return false;
-    if (Date.now() > session.exp) { clearAdminSession(); return false; }
-    const storedToken = sessionStorage.getItem(ADMIN_TOKEN_KEY);
-    if (!storedToken || storedToken !== session.token) return false;
-    /* BULGU DÜZELTMESİ: fingerprint alanı oturum oluşturulurken hesaplanıp
-       saklanıyordu ama daha önce hiçbir yerde geri kontrol edilmiyordu — var olan
-       ama işlevsiz bir kontrol izlenimi veriyordu. sessionStorage zaten sekmeye/
-       origin'e özel olduğu için bu tek başına güçlü bir sınır değil, ama session
-       verisi başka bir bağlama kopyalanırsa (örn. paylaşılan bir dosyadan) en
-       azından o cihaz/tarayıcı ortamıyla eşleşmediğini yakalar. */
-    if (session.fingerprint !== getBrowserFingerprint()) return false;
-    return true;
-  } catch { return false; }
-}
-/* Browser parmak izi — basit ama etkili */
-function getBrowserFingerprint() {
-  return btoa([
-    navigator.userAgent,
-    screen.width + 'x' + screen.height,
-    Intl.DateTimeFormat().resolvedOptions().timeZone
-  ].join('|')).slice(0, 24);
-}
-/* Yeni oturum oluştur */
-function createAdminSession() {
-  const token = generateSessionToken();
-  const session = {
-    token,
-    exp: Date.now() + SESSION_TIMEOUT_MS,
-    fingerprint: getBrowserFingerprint(),
-    created: Date.now()
-  };
-  sessionStorage.setItem(ADMIN_SESSION_KEY, btoa(JSON.stringify(session)));
-  sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
-  return token;
-}
 /* Oturumu temizle */
 function clearAdminSession() {
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
@@ -367,7 +275,7 @@ function safeUrl(value, fallback = '#') {
 function safeImageSrc(value, fallback = `${A}products_hero-1.webp`) {
   const raw = cleanText(value, SECURITY_LIMITS.image);
   if (!raw) return fallback;
-  if (raw.startsWith('/assets/') || raw.startsWith(A)) return raw;
+  if (raw.startsWith('/assets/') || raw.startsWith(A) || raw.startsWith('/api/images/')) return raw;
   if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(raw) && raw.length <= SECURITY_LIMITS.image) return raw;
   if (/^blob:/i.test(raw)) return raw;
   try {
@@ -416,22 +324,6 @@ function sortProductsForStore(list) {
     return (Number(a?.id)||0) - (Number(b?.id)||0);
   });
 }
-function repairProducts(products) {
-  const current = normalizeProducts(products);
-  const byId = new Map(current.map(p => [Number(p.id), p]));
-  INITIAL_PRODUCTS.forEach(base => {
-    const existing = byId.get(base.id);
-    if (!existing) byId.set(base.id, {...base});
-    else byId.set(base.id, {
-      ...existing,
-      category: categoryLabelFromKey(categoryKey(existing.category || base.category), existing.category || base.category),
-      visible: existing.visible !== false,
-      image: existing.image || base.image,
-      gallery: Array.isArray(existing.gallery) && existing.gallery.length ? existing.gallery : base.gallery
-    });
-  });
-  return [...byId.values()].sort((a,b)=>Number(a.id)-Number(b.id));
-}
 function avgRating(reviews) {
   const a = (reviews||[]).filter(r=>r.approved);
   return a.length ? a.reduce((s,r)=>s+r.rating,0)/a.length : 0;
@@ -458,11 +350,36 @@ function _sk(key) {
    input'un scroll/odak davranışında sıçramaya yol açan asıl kaynak buydu. Bu hook,
    yazmayı kullanıcı bir süre durana kadar erteler (debounce) ki her tuş vuruşu değil,
    sadece yazma bittiğinde bir kez ağır encode/localStorage işlemi çalışsın. */
-function useAutosave(key, value, delay = 500) {
+function useAutosave(key, value, delay = 500, enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     const t = setTimeout(() => writeStored(key, value), delay);
     return () => clearTimeout(t);
-  }, [key, value, delay]);
+  }, [key, value, delay, enabled]);
+}
+/* ── SUNUCU (API) ──
+   Ürünler, yorumlar ve site ayarları sunucudaki veritabanından gelir; panelde
+   yapılan değişiklikler tüm ziyaretçilere yansır. Son başarılı katalog,
+   sonraki açılışta anında görünsün diye tarayıcıda önbelleğe alınır. Sunucuya
+   ulaşılamazsa önbellek ya da yerleşik ürün listesiyle çalışmaya devam edilir. */
+const CATALOG_CACHE_KEY = 'ravun:catalogCache';
+function catalogFromPayload(data) {
+  return {
+    products: Array.isArray(data?.products) ? (data.products.length ? normalizeProducts(data.products) : []) : normalizeProducts(INITIAL_PRODUCTS),
+    reviews: normalizeReviews(data?.reviews && typeof data.reviews === 'object' ? data.reviews : INITIAL_REVIEWS),
+    settings: normalizeSiteSettings(data?.settings || {})
+  };
+}
+async function apiPost(path, body) {
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } catch {
+    throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'İşlem tamamlanamadı.');
+  return data;
 }
 function readStored(key, fallback) {
   try {
@@ -518,7 +435,7 @@ function normalizeSiteSettings(value) {
     desc: cleanText(cat?.desc || DEFAULT_CATEGORY_SETTINGS[categoryKey(key)]?.desc || '', 280),
     image: safeImageSrc(cat?.image, DEFAULT_CATEGORY_SETTINGS[categoryKey(key)]?.image || `${A}products_hero-1.webp`)
   }]));
-  const staleVisualPreset = incoming.styleVersion !== DEFAULT_SITE_SETTINGS.styleVersion;
+  const staleVisualPreset = false;
   return {
     ...DEFAULT_SITE_SETTINGS,
     ...incoming,
@@ -625,7 +542,7 @@ function normalizeFavorites(value, products = INITIAL_PRODUCTS) {
   const valid = new Set((products || []).map(p => Number(p.id)));
   return Array.isArray(value) ? [...new Set(value.map(Number).filter(id => valid.has(id)))].slice(0, 500) : [];
 }
-function normalizeCart(value, products = INITIAL_PRODUCTS) {
+function normalizeCart(value, products = INITIAL_PRODUCTS, giftPrice = DEFAULT_SITE_SETTINGS.giftPrice) {
   if (!Array.isArray(value)) return [];
   const byId = new Map((products || []).map(p => [Number(p.id), p]));
   return value.slice(0, 200).map(item => {
@@ -643,7 +560,8 @@ function normalizeCart(value, products = INITIAL_PRODUCTS) {
          biri kendi sepetindeki fiyatı DevTools ile düşürüp WhatsApp sipariş
          mesajında yanlış toplamla karşınıza çıkabilirdi. Fiyat artık her zaman
          güncel ürün kataloğundan (base.price) okunuyor; tek kaynak bu. */
-      price: safeNumber(base.price, 0, 0, 10_000_000),
+      price: safeNumber(base.price, 0, 0, 10_000_000) + (item?.giftWrap ? safeNumber(giftPrice, 0, 0, 100000) : 0),
+      giftPrice: item?.giftWrap ? safeNumber(giftPrice, 0, 0, 100000) : 0,
       qty: safeNumber(item?.qty, 1, 1, 99),
       image: safeImageSrc(item?.image || base.image, base.image),
       giftNote: cleanText(item?.giftNote || '', 300),
@@ -655,16 +573,34 @@ function normalizeCart(value, products = INITIAL_PRODUCTS) {
     };
   }).filter(Boolean);
 }
+/* Sipariş kalemleri bir "an görüntüsü"dür: sipariş anındaki fiyat ve seçimler
+   korunmalı. Önceden burada normalizeCart kullanılıyordu — o fonksiyon kalemi
+   güncel katalogla yeniden eşleştirdiği için (1) hediye paketli kalemler
+   ("3-gift-…" id'li) katalogda bulunamayıp siparişten SİLİNİYOR, (2) ürün
+   fiyatı sonradan değişince geçmiş siparişin tutarı da değişiyordu. Site her
+   açıldığında bu sonucu geri yazdığı için admin panelindeki sipariş kayıtları
+   bozuluyordu. Admin tarafındaki normalizeCartForOrder ile aynı kural. */
+function normalizeOrderItems(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 200).filter(Boolean).map(item => ({
+    ...item,
+    title: cleanText(item?.title || '', 120),
+    price: safeNumber(item?.price, 0, 0, 10_000_000),
+    qty: safeNumber(item?.qty, 1, 1, 99),
+    image: safeImageSrc(item?.image, `${A}products_hero-1.webp`)
+  }));
+}
 function normalizeOrders(value) {
-  return Array.isArray(value) ? value.slice(0, 5000).map(o => ({
+  return Array.isArray(value) ? value.slice(0, 5000).filter(Boolean).map(o => ({
     ...o,
-    id: cleanText(o?.id || `RVN-${Date.now()}`, 40),
+    id: o?.id ?? Date.now(),
+    orderNo: cleanText(o?.orderNo || `RVN-${Date.now()}`, 40),
     status: cleanText(o?.status || 'pending', 40),
     customerName: cleanText(o?.customerName || '', 90),
     customerPhone: cleanText(o?.customerPhone || '', 30),
-    trackingCode: cleanText(o?.trackingCode || '', 80),
+    cargoCode: cleanText(o?.cargoCode || o?.trackingCode || '', 80),
     note: cleanText(o?.note || '', 500),
-    items: normalizeCart(o?.items || [])
+    items: normalizeOrderItems(o?.items || [])
   })) : [];
 }
 const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim', favorites:'favoriler' };
@@ -1088,10 +1024,12 @@ function ReviewSection({productId, allReviews, setAllReviews}){
   const reviews=useMemo(()=>reviewList(allReviews, productId),[allReviews,productId]);
   const avg=useMemo(()=>reviews.length?reviews.reduce((s,r)=>s+r.rating,0)/reviews.length:0,[reviews]);
   const dist=useMemo(()=>{const d={5:0,4:0,3:0,2:0,1:0};reviews.forEach(r=>{d[r.rating]=(d[r.rating]||0)+1;});return d;},[reviews]);
-  const submitReview=()=>{
+  const [sending,setSending]=useState(false);
+  const [error,setError]=useState('');
+  const submitReview=async()=>{
     const cleanName = (form.name||'').trim().slice(0, 60).replace(/[<>]/g,'');
     const cleanText = (form.text||'').trim().slice(0, 1200).replace(/[<>]/g,'');
-    if(!cleanName || !cleanText) return;
+    if(!cleanName || !cleanText || sending) return;
     // Spam önlemi: aynı IP'den çok fazla yorum engeli (basit client-side)
     const recentKey = 'rv_review_ts';
     try {
@@ -1100,24 +1038,22 @@ function ReviewSection({productId, allReviews, setAllReviews}){
       sessionStorage.setItem(recentKey, String(Date.now()));
     } catch {}
     const rating = Math.min(5, Math.max(1, Number(form.rating)||5));
-    const nr={
-      id: Date.now(),
-      name: cleanName,
-      avatar: cleanName[0].toLocaleUpperCase('tr-TR'),
-      rating,
-      date: 'Şimdi',
-      text: cleanText,
-      helpful: 0,
-      approved: true
-    };
-    setAllReviews(prev=>({...prev,[productId]:[nr,...(prev[productId]||[])]}));
-    setForm({name:'',text:'',rating:5}); setSent(true);
-    setTimeout(()=>{setSent(false);setTab('list');},2500);
+    setSending(true); setError('');
+    try {
+      await apiPost('/reviews', {productId, name:cleanName, text:cleanText, rating});
+      setForm({name:'',text:'',rating:5}); setSent(true);
+      setTimeout(()=>{setSent(false);setTab('list');},4000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
   };
   const markHelpful=id=>{
     if(helpfulMap[id])return;
     setAllReviews(prev=>({...prev,[productId]:(prev[productId]||[]).map(r=>r.id===id?{...r,helpful:r.helpful+1}:r)}));
     setHelpfulMap(m=>({...m,[id]:true}));
+    apiPost(`/reviews/${id}/helpful`, {}).catch(()=>{});
   };
   return (
     <div className="reviewSection">
@@ -1161,12 +1097,13 @@ function ReviewSection({productId, allReviews, setAllReviews}){
       )}
       {tab==='write'&&(
         <div className="writeReviewArea">
-          {sent?<div className="reviewSentMsg"><ICheck/> Yorumunuz eklendi, teşekkürler!</div>:(
+          {sent?<div className="reviewSentMsg"><ICheck/> Teşekkürler! Yorumunuz alındı, onaylandıktan sonra yayınlanacak.</div>:(
             <>
               <div className="writeReviewField"><label>Puanınız</label><StarRating rating={form.rating} size="md" interactive onSet={n=>setForm(f=>({...f,rating:n}))}/></div>
               <div className="writeReviewField"><label>Adınız</label><input className="reviewInput" placeholder="Ad Soyad" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
               <div className="writeReviewField"><label>Yorumunuz</label><textarea className="reviewTextarea" placeholder="Ürün hakkındaki deneyiminizi paylaşın…" rows={4} value={form.text} onChange={e=>setForm(f=>({...f,text:e.target.value}))}/></div>
-              <button className="reviewSubmit" onClick={submitReview} disabled={!form.name||!form.text}>Yorum Gönder ↗</button>
+              {error&&<p className="reviewError" role="alert">{error}</p>}
+              <button className="reviewSubmit" onClick={submitReview} disabled={!form.name||!form.text||sending}>{sending?'Gönderiliyor…':'Yorum Gönder ↗'}</button>
             </>
           )}
         </div>
@@ -1810,7 +1747,7 @@ function compressImageFile(file, {maxDim = 2000, quality = 0.92} = {}) {
 function Process(){
   return (
     <section id="process" className="process sectionSoft">
-      <div className="sectionHead narrow reveal"><p>SÜREÇ</p><h2>Üretim notları</h2><span>Bu alan varsayılan ana sayfadan kaldırıldı.</span></div>
+      <div className="sectionHead narrow reveal"><p>SÜREÇ</p><h2>Üretim notları</h2><span>Eskizden teslimata, her Ravun parçasının atölyedeki yolculuğu.</span></div>
       <div className="processGrid">{steps.map(([n,t,d,s])=><article key={n} className="stepCard reveal"><div className="stepTop"><strong>{n}</strong><span/></div><h3>{t}</h3><p>{d}</p><small>{s}</small></article>)}</div>
     </section>
   );
@@ -1913,8 +1850,10 @@ function Contact(){
       mesaj: cleanText(form.mesaj, 1200),
       waStatus: 'pending', // 'sent' | 'pending' | 'failed'
     };
-    const saved = saveContactMsg(entry);
+    saveContactMsg(entry);
     setSavedMsgs(readContactMsgs());
+    // Atölyeye ulaşması için sunucuya da kaydet (WhatsApp açılmasa bile panelde görünür).
+    apiPost('/messages', {isim:entry.isim, eposta:entry.eposta, telefon:entry.telefon, parca:entry.parca, mesaj:entry.mesaj}).catch(err=>console.warn('[Ravun] mesaj sunucuya kaydedilemedi:', err.message));
     // 2. WhatsApp'ı aç
     const text = `Merhaba, Ravun formu üzerinden ulaşıyorum.\n\nİsim: ${entry.isim}\nE-posta: ${entry.eposta}\nTelefon: ${entry.telefon||'—'}\nİlgilendiğim ürün: ${entry.parca||'—'}\n\nMesaj: ${entry.mesaj||'—'}`;
     setTimeout(() => {
@@ -2042,6 +1981,8 @@ function Contact(){
 function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go}){
   const [customer,setCustomer]=useState({name:'',phone:'',note:''});
   const [created,setCreated]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [orderError,setOrderError]=useState('');
   const total=useMemo(()=>cart.reduce((s,x)=>s+x.price*x.qty,0),[cart]);
   const giftCount=cart.filter(x=>x.giftWrap).length;
   const itemCount=cart.reduce((s,x)=>s+Number(x.qty||0),0);
@@ -2061,20 +2002,42 @@ function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go})
       // önceden sepet hiç temizlenmiyordu, tamamlanan sipariş kalemleri sepette kalıyordu.
       if(created) clearCart?.();
       setCreated(null);
+      setOrderError('');
       setCustomer({name:'',phone:'',note:''});
     }
   },[open]);
-  const submitOrder=()=>{
-    if(cart.length===0)return;
-    const order=createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
-    setCreated(order);
-  };
-  const ensureOrderForWa=()=>{
-    if(cart.length===0)return;
-    if(!created){
-      const order=createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
+  const placeOrder=async()=>{
+    setBusy(true); setOrderError('');
+    try {
+      const order=await createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
       setCreated(order);
+      return order;
+    } catch (err) {
+      setOrderError(err.message);
+      return null;
+    } finally {
+      setBusy(false);
     }
+  };
+  const submitOrder=()=>{
+    if(cart.length===0||busy||created)return;
+    placeOrder();
+  };
+  /* Önceden link href'i render anında hesaplanıyordu; taslak tıklama anında
+     oluşturulduğu için WhatsApp mesajına sipariş numarası hiç girmiyordu.
+     Artık önce sipariş oluşturulup mesaj numarayla birlikte açılıyor. */
+  const ensureOrderForWa=async e=>{
+    if(cart.length===0||created)return;
+    e.preventDefault();
+    if(busy)return;
+    // Sekme tıklama anında açılır (açılır pencere engelleyicisine takılmasın),
+    // sipariş kaydı oluşunca numarayla birlikte WhatsApp'a yönlendirilir.
+    const win=window.open('about:blank','_blank');
+    const order=await placeOrder();
+    const msg=buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created:order});
+    const url=`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
+    if(win){ try{ win.opener=null; }catch{} win.location.href=url; }
+    else window.location.href=url;
   };
   const addNoteChip=(text)=>setCustomer(c=>({
     ...c,
@@ -2105,16 +2068,17 @@ function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go})
         <div className="drawerTotal"><span>Toplam</span><strong>{money(total)}</strong></div>
         {cart.length>0&&(
           <div className="drawerOrderBox">
-            <div><b>Sipariş taslağı</b><small>VPS/veritabanı gelene kadar admin panelinde yerel kayıt olarak tutulur.</small></div>
+            <div><b>Sipariş bilgileri</b><small>Siparişiniz atölyeye iletilir; ödeme ve teslim detayları WhatsApp üzerinden netleşir.</small></div>
             <input value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))} placeholder="Ad Soyad"/>
             <input value={customer.phone} onChange={e=>setCustomer(c=>({...c,phone:e.target.value}))} placeholder="Telefon"/>
             <div className="noteChips" aria-label="Hızlı sipariş notları">
               {['Hediye paketi olsun','Ölçü konuşalım','Teslim tarihi önemli'].map(chip=><button key={chip} type="button" onClick={()=>addNoteChip(chip)}>{chip}</button>)}
             </div>
             <textarea value={customer.note} onChange={e=>setCustomer(c=>({...c,note:e.target.value}))} placeholder="Ölçü, renk, özel istek notu" rows="2"/>
-            <button className="draftOrderBtn" onClick={submitOrder} disabled={!!created}>{created?'✓ Taslak Oluşturuldu':'Sipariş Taslağı Oluştur'}</button>
-            <small className="checkoutHint">Taslak oluşturunca admin panelindeki sipariş listesine düşer. WhatsApp mesajı da aynı bilgileri taşır.</small>
-            {created&&<p className="orderCreated">✓ {created.orderNo} oluşturuldu. Admin panelinden takip edebilirsin.</p>}
+            <button className="draftOrderBtn" onClick={submitOrder} disabled={!!created||busy}>{created?'✓ Sipariş Alındı':busy?'Gönderiliyor…':'Siparişi Gönder'}</button>
+            <small className="checkoutHint">Siparişiniz kaydedilir ve atölyeye ulaşır. Dilerseniz aşağıdan WhatsApp ile de yazabilirsiniz; mesaj sipariş numaranızı taşır.</small>
+            {created&&<p className="orderCreated">✓ Siparişiniz alındı. Sipariş no: <b>{created.orderNo}</b></p>}
+            {orderError&&<p className="orderError" role="alert">{orderError} WhatsApp ile sipariş vermeye devam edebilirsiniz.</p>}
           </div>
         )}
         <a className="waOrder" href={`https://wa.me/${WA_NUMBER}?text=${waMsg}`} target="_blank" rel="noreferrer" onClick={ensureOrderForWa}>WhatsApp ile Sipariş Ver</a>
@@ -2270,7 +2234,10 @@ function Header({count, favCount, onCart, page, go, onSearch, settings, onNavTog
 function Hero({go, settings}){
   const [active,setActive]=useState(0);
   useEffect(()=>{const t=setInterval(()=>setActive(v=>(v+1)%slides.length),4500);return()=>clearInterval(t);},[]);
-  const s={...slides[active], tag:settings?.heroTag || slides[active].tag, line1:settings?.heroLine1 || slides[active].line1, line2:settings?.heroLine2 || slides[active].line2};
+  // Panelden düzenlenen hero metni ilk slayta uygulanır; diğer slaytlar kendi metnini korur.
+  const s=active===0
+    ? {...slides[0], tag:settings?.heroTag || slides[0].tag, line1:settings?.heroLine1 || slides[0].line1, line2:settings?.heroLine2 || slides[0].line2}
+    : slides[active];
   const heroSrc = slides[active]?.image || slides[0].image;
   return (
     <section id="hero" className="hero" style={{'--hero-img': `url(${heroSrc})`}}>
@@ -2381,7 +2348,7 @@ function BrandExperience({go}){
       <div className="brandExperienceCopy reveal">
         <p>RAVUN DİLİ</p>
         <h2>Sadece ürün değil,<br/><em>atölyeden çıkan bir iz.</em></h2>
-        <span>Site genelinde daha sakin geçişler, daha büyük görsel alanları ve daha net bilgi bloklarıyla premium mağaza hissi güçlendirildi.</span>
+        <span>Her parça; malzemesinin hikayesi, özenli paketlemesi ve bakım notuyla birlikte size ulaşır.</span>
         <button onClick={()=>go('story')}>Marka Hikayesini Aç ↗</button>
       </div>
       <div className="brandPillarGrid reveal">
@@ -2412,7 +2379,7 @@ function AtelierJournal(){
     ['Döküm','Zümrüt ton için daha sakin, açık pigment karışımı denendi.'],
     ['Paket','Keten sarım + deri etiketli hediye sunumu hazırlandı.']
   ];
-  return <section className="atelierJournal sectionSoft"><div className="journalInner reveal"><div><p>ATÖLYE GÜNLÜĞÜ</p><h2>Marka canlı<br/><em>görünsün.</em></h2><span>Bu alan, ileride admin panelden değiştirilebilir mini üretim notları için hazırlandı.</span></div><div className="journalCards">{notes.map(([t,d])=><article key={t}><b>{t}</b><p>{d}</p></article>)}</div></div></section>;
+  return <section className="atelierJournal sectionSoft"><div className="journalInner reveal"><div><p>ATÖLYE GÜNLÜĞÜ</p><h2>Atölyeden<br/><em>güncel notlar.</em></h2><span>Tezgâhta bu aralar neler oluyor: seçilen ahşaplar, denenen tonlar, hazırlanan paketler.</span></div><div className="journalCards">{notes.map(([t,d])=><article key={t}><b>{t}</b><p>{d}</p></article>)}</div></div></section>;
 }
 function ArchivePreview({products, goProduct}){
   const archived=useMemo(()=>sortProductsForStore(products.filter(productIsArchive)).slice(0,4),[products]);
@@ -2459,12 +2426,21 @@ function OrderTrustFlow({go}){
   );
 }
 /* ── ANA SAYFA ── */
+/* Site Ayarları > Görünürlük anahtarlarının her biri burada bir bölümü açıp kapatır. */
 function Home({add, go, goProduct, products, allReviews, favorites, toggleFav, settings}){
   return <>
     <Hero go={go} settings={settings}/>
     <Marquee/>
+    {settings?.showAtelierFeature&&<AtelierFeature settings={settings}/>}
     <HomeProducts add={add} go={go} goProduct={goProduct} products={products} allReviews={allReviews} favorites={favorites} toggleFav={toggleFav}/>
+    {settings?.showEditions&&<EditionsSection go={go}/>}
+    {settings?.showArchive!==false&&<ArchivePreview products={products.filter(p=>p.visible!==false)} goProduct={goProduct}/>}
     {settings?.showStoryPreview!==false&&<StoryPreview go={go}/>}
+    {settings?.showProcess&&<Process/>}
+    {settings?.showPromise&&<PremiumPromise/>}
+    {settings?.showTrustFlow&&<OrderTrustFlow go={go}/>}
+    {settings?.showBrandExperience&&<BrandExperience go={go}/>}
+    {settings?.showJournal&&<AtelierJournal/>}
     {settings?.showCta!==false&&<CTA go={go}/>}
   </>;
 }
@@ -2506,8 +2482,8 @@ function parseInitialRoute(products){
   if(productMatch){
     const id = Number(productMatch[1]);
     const product = products.find(p=>p.id===id);
-    if(product) return {page:'product', product};
-    return {page:'collection', product:null};
+    // Ürün henüz yüklenmemiş katalogda olabilir — katalog gelince çözülür.
+    return {page:'product', product:product||null, productId:Number.isFinite(id)?id:null};
   }
   const slug = path.replace(/^\//,'');
   const page = SLUG_TO_PAGE[slug];
@@ -2523,7 +2499,7 @@ class ErrorBoundary extends React.Component{
       const clearSiteCache = () => {
         try {
           // Hem eski düz anahtarları hem şifreli anahtarları temizle
-          ['ravun:products','ravun:reviews','ravun:favorites','ravun:cart','ravun:orders','ravun:recent','ravun:siteSettings'].forEach(k => {
+          ['ravun:products','ravun:reviews','ravun:favorites','ravun:cart','ravun:orders','ravun:recent','ravun:siteSettings',CATALOG_CACHE_KEY].forEach(k => {
             localStorage.removeItem(k);
             try{ localStorage.removeItem(btoa('rv:'+k).replace(/=/g,'')); }catch{}
           });
@@ -2538,16 +2514,38 @@ class ErrorBoundary extends React.Component{
 }
 /* ── APP ── */
 function App(){
-  const [products,setProducts]=useState(()=>repairProducts(readStored('ravun:products', INITIAL_PRODUCTS)));
+  const [initialCatalog]=useState(()=>catalogFromPayload(readStored(CATALOG_CACHE_KEY, null)));
+  const [products,setProducts]=useState(initialCatalog.products);
   const initialRoute = useMemo(()=>parseInitialRoute(products),[]);
-  const [allReviews,setAllReviews]=useState(()=>normalizeReviews(readStored('ravun:reviews', INITIAL_REVIEWS)));
+  const [allReviews,setAllReviews]=useState(initialCatalog.reviews);
   const [favorites,setFavorites]=useState(()=>normalizeFavorites(readStored('ravun:favorites', []), products));
   const [page,setPage]=useState(initialRoute.page);
   const [currentProduct,setCurrentProduct]=useState(initialRoute.product);
-  const [cart,setCart]=useState(()=>normalizeCart(readStored('ravun:cart', []), products));
-  const [orders,setOrders]=useState(()=>normalizeOrders(readStored('ravun:orders', [])));
+  const [pendingProductId,setPendingProductId]=useState(initialRoute.page==='product'&&!initialRoute.product?initialRoute.productId:null);
+  const [siteSettings,setSiteSettings]=useState(initialCatalog.settings);
+  const [cart,setCart]=useState(()=>normalizeCart(readStored('ravun:cart', []), products, siteSettings.giftPrice));
   const [recentIds,setRecentIds]=useState(()=>recentProductIds(readStored('ravun:recent', []), products));
-  const [siteSettings,setSiteSettings]=useState(()=>normalizeSiteSettings(readStored('ravun:siteSettings', DEFAULT_SITE_SETTINGS)));
+  const [catalogReady,setCatalogReady]=useState(false);
+  useEffect(()=>{
+    let alive=true;
+    fetch('/api/catalog',{headers:{Accept:'application/json'}})
+      .then(r=>r.ok?r.json():Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(data=>{
+        if(!alive)return;
+        const c=catalogFromPayload(data);
+        setProducts(c.products);
+        setAllReviews(c.reviews);
+        setSiteSettings(c.settings);
+        // Sepet/favoriler güncel katalogla yeniden eşleştirilir (fiyat, satış durumu).
+        setCart(normalizeCart(readStored('ravun:cart', []), c.products, c.settings.giftPrice));
+        setFavorites(normalizeFavorites(readStored('ravun:favorites', []), c.products));
+        setRecentIds(recentProductIds(readStored('ravun:recent', []), c.products));
+        writeStored(CATALOG_CACHE_KEY, data);
+      })
+      .catch(err=>console.warn('[Ravun] Katalog sunucudan alınamadı, kayıtlı veriyle devam ediliyor:', err?.message))
+      .finally(()=>{ if(alive) setCatalogReady(true); });
+    return()=>{alive=false;};
+  },[]);
   const [drawer,setDrawer]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
@@ -2594,7 +2592,7 @@ function App(){
   },[]);
   useEffect(()=>{
     const current = parseInitialRoute(products);
-    window.history.replaceState({page:current.page, productId:current.product?.id||null}, '', window.location.href);
+    window.history.replaceState({page:current.page, productId:current.product?.id||current.productId||null}, '', window.location.href);
     const onPop=e=>{
       const st=e.state || parseInitialRoute(products);
       const product=st.productId?products.find(p=>p.id===st.productId):st.product;
@@ -2604,14 +2602,23 @@ function App(){
     window.addEventListener('popstate',onPop);
     return()=>window.removeEventListener('popstate',onPop);
   },[go,products]);
-  useAutosave('ravun:products', products);
-  useAutosave('ravun:reviews', allReviews);
   useEffect(()=>{ if(currentProduct){ const fresh=products.find(p=>p.id===currentProduct.id); if(fresh && fresh!==currentProduct) setCurrentProduct(fresh); } },[products,currentProduct]);
-  useAutosave('ravun:favorites', favorites);
-  useAutosave('ravun:cart', cart);
-  useAutosave('ravun:orders', orders);
-  useAutosave('ravun:recent', recentIds);
-  useAutosave('ravun:siteSettings', siteSettings);
+  // /urun/:id ile gelinen ama önbellekte olmayan ürün: katalog gelince aç, yoksa koleksiyona dön.
+  useEffect(()=>{
+    if(pendingProductId==null)return;
+    const found=products.find(p=>p.id===pendingProductId);
+    if(found){ setCurrentProduct(found); setPendingProductId(null); return; }
+    if(catalogReady){
+      setPendingProductId(null);
+      window.history.replaceState({page:'collection', productId:null}, '', pagePath('collection'));
+      go('collection', null, false);
+    }
+  },[pendingProductId,products,catalogReady,go]);
+  // Sepet/favoriler katalog gelmeden yazılmaz: aksi halde henüz yüklenmemiş
+  // ürünler eşleşmeyip kayıttan silinebilirdi.
+  useAutosave('ravun:favorites', favorites, 500, catalogReady);
+  useAutosave('ravun:cart', cart, 500, catalogReady);
+  useAutosave('ravun:recent', recentIds, 500, catalogReady);
   useEffect(()=>updateMeta(page,currentProduct),[page,currentProduct]);
   useEffect(()=>{ if(page==='product'&&currentProduct){ setRecentIds(ids=>[currentProduct.id,...(ids||[]).filter(id=>id!==currentProduct.id)].slice(0,8)); } },[page,currentProduct?.id]);
   useEffect(()=>{const nav=e=>go(e.detail);window.addEventListener('ravun:navigate',nav);return()=>window.removeEventListener('ravun:navigate',nav);},[go]);
@@ -2656,22 +2663,33 @@ function App(){
       toastTimer.current=setTimeout(()=>setToast(''),2200);
       return;
     }
-    const giftPrice=Number(p.giftWrap ? (p.giftPrice||0) : 0);
-    const cartId = p.giftWrap ? `${p.id}-gift-${Date.now()}` : p.id;
-    setCart(items=>p.giftWrap ? [...items,{...p,price:Number(p.price||0)+giftPrice,id:cartId,baseId:p.id,qty:1}] : (items.find(x=>x.id===p.id)?items.map(x=>x.id===p.id?{...x,qty:x.qty+1}:x):[...items,{...p,qty:1}]));
+    const giftPrice=p.giftWrap ? safeNumber(siteSettings.giftPrice, 0, 0, 100000) : 0;
+    // Karttan eklenirken de varsayılan boyut/ton seçili sayılır — detay sayfasından
+    // eklenen aynı ürünle ayrı satır oluşmasın, WhatsApp mesajında seçim görünsün.
+    p={...p, selectedSize:p.selectedSize ?? (p.sizes?.[0] || ''), selectedColor:p.selectedColor ?? (p.colorNames?.[0] || '')};
+    const variant=[p.selectedSize, p.selectedColor].filter(Boolean).join('|');
+    const cartId = p.giftWrap ? `${p.id}-gift-${Date.now()}` : (variant ? `${p.id}-${variant}` : p.id);
+    setCart(items=>p.giftWrap
+      ? [...items,{...p,price:Number(p.price||0)+giftPrice,giftPrice,id:cartId,baseId:p.id,qty:1}]
+      : (items.find(x=>x.id===cartId)
+        ? items.map(x=>x.id===cartId?{...x,qty:Math.min(99,x.qty+1)}:x)
+        : [...items,{...p,id:cartId,baseId:p.id,qty:1}]));
     if(toastTimer.current)clearTimeout(toastTimer.current);
     setToast(`${p.title} sepete eklendi`);
     toastTimer.current=setTimeout(()=>setToast(''),2200);
   };
   const dec=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:x.qty-1}:x).filter(x=>x.qty>0));
-  const incQty=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:x.qty+1}:x));
-  const createOrder=(customer={})=>{
-    // cart snapshot - stale closure önlemi için anlık değer alınır
-    const cartSnapshot=[...cart];
-    const order={id:Date.now(),orderNo:makeOrderNo(),status:'pending',items:cartSnapshot.map(({id,title,price,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})=>({id,title,price,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})),customerName:customer.customerName||'',customerPhone:customer.customerPhone||'',note:customer.note||'',cargoCode:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-    setOrders(os=>[order,...os]);
+  const incQty=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:Math.min(99,x.qty+1)}:x));
+  // Sipariş sunucuda oluşturulur; fiyatlar sunucuda güncel katalogdan hesaplanır.
+  const createOrder=async(customer={})=>{
+    const {order}=await apiPost('/orders', {
+      items:cart.map(({id,baseId,qty,selectedSize,selectedColor,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery})=>({id,baseId:baseId??id,qty,selectedSize,selectedColor,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery})),
+      customerName:customer.customerName||'',
+      customerPhone:customer.customerPhone||'',
+      note:customer.note||''
+    });
     if(toastTimer.current)clearTimeout(toastTimer.current);
-    setToast(`${order.orderNo} sipariş taslağı oluşturuldu`);
+    setToast(`${order.orderNo} siparişiniz alındı`);
     toastTimer.current=setTimeout(()=>setToast(''),2600);
     return order;
   };
@@ -2685,6 +2703,7 @@ function App(){
       {page==='story'&&<StoryPage go={go}/>}
       {page==='contact'&&<ContactPage/>}
       {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go}/>}
+      {page==='product'&&!currentProduct&&<main className="page productDetailPage"><p className="pageLoading">Ürün yükleniyor…</p></main>}
       {page==='product'&&currentProduct&&<ProductDetailPage product={currentProduct} go={go} add={add} allReviews={allReviews} setAllReviews={setAllReviews} favorites={favorites} toggleFav={toggleFav} products={products} recentIds={recentIds} settings={siteSettings}/>}
       <Footer go={go} settings={siteSettings} onAdmin={handleAdmin}/>
     </>

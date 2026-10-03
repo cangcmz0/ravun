@@ -3,12 +3,11 @@ import { toast } from 'sonner'
 import { Eye, PackageSearch, Search, Trash2 } from 'lucide-react'
 import {
   ORDER_STATUSES,
-  loadOrders,
   money,
   orderStatusLabel,
   orderTotal,
-  saveOrders,
 } from '@/lib/ravun-data'
+import { deleteOrder, errorMessage, fetchOrders, updateOrder } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -44,6 +43,7 @@ const TONE_CLASS: Record<string, string> = {
   packing: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
   cargo: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300',
   delivered: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+  cancelled: 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
 }
 
 export function Orders() {
@@ -54,15 +54,22 @@ export function Orders() {
   const [detailTarget, setDetailTarget] = useState<any>(null)
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
 
+  const [loadError, setLoadError] = useState('')
+
+  const reload = () =>
+    fetchOrders()
+      .then((list) => { setOrders(list); setLoadError('') })
+      .catch((err) => setLoadError(errorMessage(err, 'Siparişler yüklenemedi.')))
+      .finally(() => setLoaded(true))
+
   useEffect(() => {
-    setOrders(loadOrders())
-    setLoaded(true)
+    reload()
+    // Yeni siparişler panel açıkken de görünsün diye düzenli yenile.
+    const t = setInterval(reload, 60_000)
+    return () => clearInterval(t)
   }, [])
 
-  const persist = (next: any[]) => {
-    setOrders(next)
-    saveOrders(next)
-  }
+  const replaceOrder = (order: any) => setOrders((list) => list.map((o) => (o.id === order.id ? order : o)))
 
   const sorted = useMemo(
     () => [...orders].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime() || (Number(b.id) || 0) - (Number(a.id) || 0)),
@@ -86,22 +93,36 @@ export function Orders() {
   )
   const pendingCount = useMemo(() => orders.filter((o) => o.status === 'pending').length, [orders])
 
-  const handleStatusChange = (order: any, status: string) => {
-    persist(orders.map((o) => (o.id === order.id ? { ...o, status, updatedAt: new Date().toISOString() } : o)))
-    toast.success(`${order.orderNo} durumu güncellendi`)
+  const handleStatusChange = async (order: any, status: string) => {
+    try {
+      replaceOrder(await updateOrder(order.id, { status }))
+      toast.success(`${order.orderNo} durumu güncellendi`)
+    } catch (err) {
+      toast.error(`Güncellenemedi: ${errorMessage(err)}`)
+    }
   }
 
-  const handleSaveDetail = (payload: any) => {
-    persist(orders.map((o) => (o.id === payload.id ? payload : o)))
-    toast.success(`${payload.orderNo} kaydedildi`)
-    setDetailTarget(null)
+  const handleSaveDetail = async (payload: any) => {
+    try {
+      replaceOrder(await updateOrder(payload.id, { status: payload.status, cargoCode: payload.cargoCode, note: payload.note }))
+      toast.success(`${payload.orderNo} kaydedildi`)
+      setDetailTarget(null)
+    } catch (err) {
+      toast.error(`Kaydedilemedi: ${errorMessage(err)}`)
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!deleteTarget) return
-    persist(orders.filter((o) => o.id !== deleteTarget.id))
-    toast.success(`${deleteTarget.orderNo} silindi`)
+    const target = deleteTarget
     setDeleteTarget(null)
+    try {
+      await deleteOrder(target.id)
+      setOrders((list) => list.filter((o) => o.id !== target.id))
+      toast.success(`${target.orderNo} silindi`)
+    } catch (err) {
+      toast.error(`Silinemedi: ${errorMessage(err)}`)
+    }
   }
 
   return (
@@ -156,6 +177,8 @@ export function Orders() {
             <TableBody>
               {!loaded ? (
                 <TableRow><TableCell colSpan={8} className='text-muted-foreground py-10 text-center'>Yükleniyor…</TableCell></TableRow>
+              ) : loadError ? (
+                <TableRow><TableCell colSpan={8} className='text-destructive py-10 text-center'>{loadError}</TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className='text-muted-foreground py-10 text-center'>

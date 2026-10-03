@@ -1,196 +1,111 @@
-# Ravun — Admin Panel Entegrasyonu: Şu Anki Durum
+# Ravun — Sistem Durumu ve Kurulum
 
-Bu proje, sitenin (`ravun-main`) eski gömülü admin panelini kaldırıp yeni
-temayı (`shadcn-admin`) `/admin` altında entegre etme işinin devamında.
-**Giriş noktası, Panel (Dashboard), Ürünler, Siparişler, Yorumlar VE Site
-Ayarları sayfalarının hepsi çalışıyor ve gerçek veriyle besleniyor.**
+## Mimari (Ekim 2026)
 
-## ✅ Bu oturumda yapılan kontrol (otomatik doğrulama)
-Aşağıdaki "Site Ayarları" planı **zaten koddaydı** (önceki bir oturumda
-tamamlanmış ama bu dosya güncellenmemişti) — `src/admin/features/settings/index.tsx`
-tek dosyalık, 6 sekmeli (Hero / Koleksiyon & Atölye / Kategoriler /
-Paketleme & Hediye / Instagram & Footer / Görünürlük) formun kendisi,
-`src/admin/routes/_authenticated/settings.tsx` düz route dosyası olarak
-duruyor, eski `profile/account/appearance/notifications/display` klasörleri
-ve `sidebar-nav.tsx`/`content-section.tsx` zaten yoktu. Bu oturumda:
-- `npm install` ✅ temiz.
-- `npx vite build` ✅ hatasız (Site Ayarları dahil tüm sayfalar build'e giriyor).
-- Tam `npm run build` (vite build + `scripts/prerender.mjs`) ✅ hatasız,
-  3 sabit sayfa + 6 ürün sayfası önizleme üretti.
-- `npx tsc --noEmit` çalıştırıldı — **Site Ayarları/admin veri katmanıyla
-  ilgisi olmayan**, önceki şablondan kalma ~15 tip hatası var
-  (`nav-group.tsx`, `sign-out-dialog.tsx`, `input-otp.tsx`, birkaç
-  `*.test.ts(x)` dosyası — `vitest`/`axios`/`input-otp` paketleri kurulu
-  değil). `vite build` bunları ayrıca tip kontrolünden geçirmediği için
-  mevcut derlemeyi etkilemiyorlar; temiz bir proje isteniyorsa ayrı bir
-  işte ele alınabilir.
+Site artık gerçek bir sunucu + veritabanı ile çalışıyor. Önceden tüm veriler
+her ziyaretçinin kendi tarayıcısında (localStorage) duruyordu; panelde yapılan
+değişiklikleri müşteriler görmüyor, müşteri siparişleri panele ulaşmıyordu.
 
-## ✅ Tamamlanan (önceki oturumlardan)
-1. Eski admin panel siteden temizce kaldırıldı (`src/main.jsx`).
-2. Yeni panel projesi budandı (`src/admin/`) — Clerk, Users, Tasks, Apps,
-   Chats, sahte Sign-up/OTP sayfaları ve test dosyaları kaldırıldı.
-3. Paylaşılan veri/güvenlik modülü: `src/admin/lib/ravun-data.ts` — PIN
-   doğrulama, oturum/kilitleme, ürün/sipariş/yorum/ayar mantığı site ile
-   birebir aynı localStorage anahtarlarını kullanıyor.
-4. Gerçek PIN girişi + hatalı deneme sayacı + kilitleme.
-5. Route koruması — oturumsuz hiçbir `/admin/*` sayfası açılmaz.
-6. Sidebar menüsü: Panel, Ürünler, Siparişler, Yorumlar, Site Ayarları.
-7. Giriş noktası bağlandı (`src/main.jsx`) — `/admin` dynamic import ile
-   yükleniyor, site tasarımını etkilemiyor.
-8. **Ürünler sayfası** (`/admin/products`) — arama, kategori filtresi,
-   tablo, çoklu seçim + toplu görünür/gizle/sil, sekmeli ekle/düzenle
-   formu, görsel sıkıştırma.
-9. **Siparişler sayfası** (`/admin/orders`) — arama, durum filtresi,
-   tablo, detay dialog'u (görsel/beden/renk, müşteri ara/WhatsApp linki,
-   durum/kargo kodu/not düzenleme), sil. Veri: `loadOrders()/saveOrders()`.
-10. **Yorumlar sayfası** (`/admin/reviews`) — tüm ürünlerin yorumlarını tek
-    tabloda birleştirir, arama, ürün/onay filtresi, tekil/toplu
-    onayla/gizle/sil. Veri: `loadReviews()/saveReviews()`.
-
-## ✅ Bu oturumda eklenen — Dashboard artık gerçek veriyle çalışıyor
-### `src/admin/features/dashboard/`
-- **`index.tsx`**: sahte "Analytics" sekmesi (clicks/bounce rate) ve
-  işlevsiz "Download" butonu tamamen kaldırıldı. 4 KPI kartı gerçek
-  veriyle: Toplam Ürün (+ görünür sayısı, `loadProducts()`), Bekleyen
-  Sipariş (+ toplam sipariş sayısı, `loadOrders()`), Toplam Ciro
-  (`orderTotal()` toplamı, `status !== 'cancelled'` hariç tutularak —
-  Siparişler sayfasıyla aynı kural), Ortalama Puan (+ toplam yorum
-  sayısı, `loadReviews()` düzleştirilip ortalama alınıyor). Başlık ve
-  sekme adları Türkçeleştirildi (Panel / Genel Bakış), çünkü panelin geri
-  kalanı zaten Türkçe.
-- **`components/overview.tsx`**: sahte rastgele bar chart yerine, içinde
-  bulunulan yılın aylarına göre gerçek ciro grafiği (`loadOrders()` +
-  `orderTotal()`, `createdAt` alanına göre gruplanıyor, iptal hariç). O
-  yıl hiç ciro yoksa boş grafik yerine bilgilendirici bir mesaj basıyor.
-- **`components/recent-sales.tsx`**: sahte "Olivia Martin" vb. yerine
-  gerçek son 5 sipariş (müşteri adı, sipariş no, durum etiketi, tutar).
-  Sipariş yoksa boş durum mesajı gösteriyor.
-- **`components/analytics.tsx`** ve **`analytics-chart.tsx`** silindi —
-  **SIRA DOĞRU UYGULANDI**: önce `index.tsx`'teki import/JSX güncellendi,
-  ondan SONRA bu iki dosya silindi.
-- `npm install` + `npx vite build` ile doğrulandı — temiz geçti, hata/uyarı
-  yok. (Not: bu ortamda `npm run build`'in ikinci adımı olan
-  `scripts/prerender.mjs` ayrıca çalıştırılmadı; o script sadece ana site
-  ürün sayfalarını statik önizleme için işliyor, admin panelini
-  etkilemiyor — ama bir sonraki oturum tam `npm run build`'i de
-  çalıştırıp doğrulamalı.)
-
-## ✅ Tamamlandı — Site Ayarları (aşağıdaki plan birebir uygulanmış hâliyle
-kodda duruyor, referans olarak bırakıldı)
-
-Amaç: mevcut genel şablon (Profile/Account/Appearance/Notifications/
-Display sekmeleri, `src/admin/features/settings/{profile,account,
-appearance,notifications,display}/`) tamamen kaldırılıp yerine
-`DEFAULT_SITE_SETTINGS`'e (bkz. `src/admin/lib/ravun-data.ts`, satır
-~402-417) bağlı **tek sayfalık, sekmeli bir form** gelecek.
-
-### Önerilen sekme/alan planı
-`DEFAULT_SITE_SETTINGS`'teki tüm alanları kapsayacak şekilde:
-1. **Hero**: `heroTag`, `heroLine1`, `heroLine2`, `heroCta`,
-   `heroSecondCta`, `announcement` (üst duyuru şeridi — boşsa site hiç
-   göstermiyor, bkz. `src/main.jsx` satır ~2251).
-2. **Koleksiyon & Atölye**: `collectionEyebrow`, `collectionTitle`,
-   `collectionDesc`, `atelierEyebrow`, `atelierTitle`, `atelierDesc`,
-   `storyTitle`, `storyDesc`.
-   - ⚠️ **ÖNEMLİ**: `collectionTitle` ve `atelierTitle` sitede `\n`'e göre
-     bölünüp `<br/>` ile iki satır olarak basılıyor (bkz. `src/main.jsx`
-     satır ~1697 ve ~2356, `.split('\n')`). Bu iki alan **Textarea**
-     olmalı (Input değil), yoksa kullanıcı ikinci satırı giremez.
-3. **Kategoriler**: `categorySettings` — `DEFAULT_CATEGORY_SETTINGS`
-   (= `CATEGORY_DETAILS`) içindeki 6 sabit anahtar için (sırasıyla) `tum`,
-   `duvar-rafi`, `bicak-standi`, `masaustu`, `sunum-tahtasi`, `paketleme`:
-   her biri için `eyebrow` (Input), `title` (Input), `desc` (Textarea),
-   `image` (Input + basit `<img>` önizleme, `onError` ile kırık görselde
-   gizle). Sekme/bölüm başlıklarında `categoryLabelFromKey(key)` kullan
-   (zaten `ravun-data.ts`'te var — "Tümü", "Duvar Rafı" vb. döndürüyor).
-   Görsel yükleme/sıkıştırma (Ürünler'deki gibi) İSTENMEDİ, sadece metin
-   path/URL alanı yeterli.
-4. **Paketleme & Hediye**: `packageTitle`, `packageDesc` (Textarea —
-   sitede `\n` bölme yok ama uzun metin, Textarea rahat), `giftTitle`,
-   `giftDesc`, `giftPrice` (number input, TL).
-5. **Instagram & Footer**: `instagram`, `instagramUrl`, `pinterestLabel`,
-   `footerDesc`, `footerLocation`.
-6. **Görünürlük** (`showXxx` switch'leri) — **DİKKAT, önemli bulgu**:
-   `src/main.jsx` içinde grep ile kontrol edildi, sadece **`showStoryPreview`**
-   ve **`showCta`** gerçekten sitede bir bölümü açıp kapatıyor (satır
-   ~2467-2468). Diğer 8 tanesi (`showAtelierFeature`, `showEditions`,
-   `showArchive`, `showPromise`, `showProcess`, `showTrustFlow`,
-   `showBrandExperience`, `showJournal`) ya hiç çağrılmayan bir
-   komponente bağlı (`AtelierFeature`, `EditionsSection`,
-   `ArchivePreview`, `Process`, `BrandExperience` tanımlı ama JSX'te hiç
-   kullanılmıyor) ya da (`showTrustFlow`, `showJournal`, `showPromise`)
-   karşılığında hiçbir komponent bile yok. Yani bu 8 switch şu an
-   sitede **hiçbir görsel etki yapmıyor**. Formda hepsini göstermek
-   mantıklı (şema `DEFAULT_SITE_SETTINGS`'te var, ileride site tarafı
-   bağlanabilir) ama **yanlış/var olmayan bir işlev iddia etmeden**:
-   `showStoryPreview`/`showCta` için doğru açıklama yaz ("Ana sayfada
-   Hikaye önizlemesini gösterir" / "Ana sayfa altındaki CTA bölümünü
-   gösterir"), diğer 8'i ayrı bir grupta, "bu anahtarların şu an sitede
-   karşılığı yok, ileride kullanılmak üzere duruyor" notuyla göster.
-
-### Veri okuma/yazma
-- Formu başlatmak için `useState(() => loadSiteSettings())` kullan —
-  `loadSiteSettings()` zaten `normalizeSiteSettings()` uygulayıp eksik
-  alanları dolduruyor, ayrı bir `useEffect` yüklemesine gerek yok (senkron
-  localStorage okuması).
-- Kaydet butonunda `saveSiteSettings(form)` ile **doğrudan** kaydet —
-  `saveSiteSettings()` normalize ETMİYOR (diğer `saveProducts()` /
-  `saveOrders()` ile aynı konvansiyon: normalize sadece okumada olur).
-
-### Route değişikliği — **SIRA ÖNEMLİ** (Dashboard'ta bu oturumda doğru
-uygulanan kural burada da geçerli)
-1. **ÖNCE**: `src/admin/features/settings/index.tsx`'i komple yeniden
-   yaz — artık `Outlet`/`SidebarNav` yerine yukarıdaki tek-sayfa/sekmeli
-   formun kendisi olacak (Header/Main/ThemeSwitch/ConfigDrawer/
-   ProfileDropdown + Tabs — `orders.tsx`/`products.tsx`'teki header
-   deseniyle aynı, `<Search/>` yok).
-2. **ÖNCE**: `src/admin/routes/_authenticated/settings.tsx` adında YENİ,
-   DÜZ (klasörsüz) bir route dosyası oluştur — `orders.tsx` ile birebir
-   aynı desen:
-   ```tsx
-   import { createFileRoute } from '@tanstack/react-router'
-   import { Settings } from '@/features/settings'
-
-   export const Route = createFileRoute('/_authenticated/settings')({
-     component: Settings,
-   })
-   ```
-3. **ONDAN SONRA** (yeni form + yeni route çalışır hale geldikten SONRA)
-   şunları sil:
-   - `src/admin/routes/_authenticated/settings/` klasörünün tamamı
-     (`route.tsx`, `index.tsx`, `appearance.tsx`) — yeni düz
-     `settings.tsx` bunun yerine geçiyor.
-   - `src/admin/features/settings/profile/`, `account/`, `appearance/`,
-     `notifications/`, `display/` klasörleri.
-   - `src/admin/features/settings/components/sidebar-nav.tsx` ve
-     `components/content-section.tsx` (artık kullanılmıyor).
-   - Ters sıra (önce silip sonra route/form güncellemek) build'i kırar —
-     Dashboard'ta yaşanan hatanın aynısı.
-4. `routeTree.gen.ts` elle düzenlenmiyor — `vite build` (veya `vite dev`)
-   sırasında `@tanstack/router-plugin` otomatik yeniden üretiyor
-   (`vite.config.js`'teki `tanstackRouter(...)` eklentisi,
-   `routesDirectory: "./src/admin/routes"`).
-5. Bitince `npx vite build` (ideal olarak tam `npm run build`) ile
-   doğrula, hata yoksa yeni bir zip teslim et.
-
-## ❌ Hâlâ yapılmadı (Site Ayarları'ndan bağımsız, genel)
-- **Tarayıcıda uçtan uca doğrulama hiç yapılmadı** — şimdiye kadarki her
-  şey yalnızca `npm run build` / `vite build` seviyesinde doğrulandı. PIN
-  ile giriş, ürün ekle/düzenle/sil, sipariş durumu değiştirme/kargo
-  kodu/silme, yorum onayla/gizle/silme, Panel KPI/grafik akışlarının
-  hiçbiri gerçek tarayıcıda tıklanarak test edilmedi.
-
-## Kendi bilgisayarında denemek istersen
 ```
+Tarayıcı (site + /admin paneli)
+        │  fetch /api/...
+        ▼
+api/index.js            ← Vercel fonksiyonu (yalnızca server/http.js'i çağırır)
+server/standalone.js    ← VPS'te aynı kodu çalıştıran Node sunucusu
+        │
+server/http.js          ← Node (req,res) adaptörü
+server/routes.js        ← tüm API uçları
+server/auth.js          ← PIN doğrulama, HttpOnly oturum çerezi, istek sınırlama
+server/sanitize.js      ← gelen her verinin temizlenmesi
+server/db.js            ← PostgreSQL, tablolar ilk istekte otomatik kurulur
+        │
+PostgreSQL (Vercel'de Neon, VPS'te kendi Postgres'iniz)
+```
+
+Veritabanında: `products`, `settings`, `orders`, `reviews`, `messages`,
+`images` (ürün görselleri), `rate_limits`. Tablolar ilk istekte otomatik
+oluşturulur; ilk kurulumda `src/data/products.json` ürünleri ve örnek
+yorumlar bir kez yüklenir.
+
+### Ne nerede tutuluyor
+| Veri | Yer |
+|---|---|
+| Ürünler, site ayarları, yorumlar, siparişler, iletişim mesajları, ürün görselleri | Sunucu (Postgres) |
+| Sepet, favoriler, son bakılanlar | Ziyaretçinin tarayıcısı (kişisel, doğru yer) |
+| Son katalog | Tarayıcı önbelleği (hızlı açılış için; her açılışta sunucudan yenilenir) |
+
+### API uçları
+- Herkese açık: `GET /api/catalog`, `POST /api/orders`, `POST /api/reviews`,
+  `POST /api/reviews/:id/helpful`, `POST /api/messages`, `GET /api/images/:id`,
+  `GET /api/health`
+- Admin (oturum çerezi + `X-Ravun-Admin: 1` başlığı gerekir):
+  `/api/admin/login|logout|session`, `products`, `settings`, `orders/:id`,
+  `reviews/:id`, `messages/:id`, `images`, `import`
+
+### Güvenlik
+- PIN artık tarayıcı koduna gömülmüyor; yalnızca sunucu ortam değişkeninde.
+- Oturum: imzalı, `HttpOnly` + `SameSite=Strict` çerez (8 saat).
+- Hatalı PIN: IP başına 5 deneme, sonra 15 dakika kilit (sunucuda tutulur).
+- Sipariş/yorum/mesaj gönderimi IP başına sınırlı (spam koruması).
+- Sipariş fiyatları sunucuda güncel katalogdan hesaplanır; tarayıcıda
+  değiştirilen fiyat siparişe yansımaz.
+- Müşteri yorumları onaylanana kadar yayınlanmaz (Panel → Yorumlar).
+
+## Vercel kurulumu (bir kez)
+
+1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →
+   **Neon (Postgres)** → projeye bağla. `DATABASE_URL` otomatik eklenir.
+2. **PIN tanımla:** Settings → Environment Variables →
+   `ADMIN_PIN` = en az 6 haneli, tahmin edilmesi zor bir PIN.
+   (Eski `VITE_ADMIN_PIN_HASH` değişkeni varsa silin; artık kullanılmıyor.
+   Silinmezse sunucu geriye dönük olarak onu da PIN hash'i kabul eder.)
+3. İsteğe bağlı: `SESSION_SECRET` = uzun rastgele metin.
+4. **Redeploy** edin. Kontrol: `https://SITE/api/health` →
+   `{"ok":true,"admin":true}` dönmeli.
+5. `/admin`'e PIN ile girin. Daha önce panelde bu tarayıcıda değişiklik
+   yaptıysanız Panel sayfasında **"Bu tarayıcıda eski kayıtlar bulundu"**
+   kartı çıkar → **Sunucuya aktar**.
+
+## VPS'e taşıma
+
+Aynı kod, değişiklik gerekmez:
+```
+# Node 20+ ve PostgreSQL kurulu olmalı
+git clone … && cd ravun
+npm ci
+cp .env.example .env      # DATABASE_URL ve ADMIN_PIN'i doldurun
+npm run build
+npm start                 # PORT varsayılan 3000
+```
+`npm start` hem siteyi (`dist/`) hem `/api`'yi tek süreçte sunar ve
+`vercel.json`'daki güvenlik başlıklarını aynen uygular. Önüne Nginx/Caddy ile
+HTTPS koyun (`X-Forwarded-Proto` ve `X-Forwarded-For` başlıklarını iletin).
+Sürekli çalışması için `pm2` ya da systemd servisi kullanın.
+
+Veriyi Neon'dan VPS'e taşımak: `pg_dump "$NEON_URL" | psql "$VPS_URL"`.
+
+## Yerel geliştirme
+```
+cp .env.example .env      # DATABASE_URL (yerel Postgres) ve ADMIN_PIN
 npm install
-npm run dev
+npm run dev               # site + panel + API birlikte (Vite içinde)
 ```
-`/admin`'e girip PIN ile giriş yaptıktan sonra Panel, Ürünler, Siparişler,
-Yorumlar, Site ayarları linklerinin hepsi açılıyor olmalı (ilk dördü
-gerçek veriyle çalışıyor, Site ayarları hâlâ şablon).
 
-PIN için `.env` dosyasına `VITE_ADMIN_PIN_HASH` gerekiyor — repo'da örnek
-bir hash bırakıldı, gerçek PIN'in hash'ini üretmek için:
-```
-node -e "const c=require('crypto');console.log(c.createHash('sha256').update('ravun-local-admin-v2:PININIZ').digest('hex'))"
-```
+## Eski listeden kapananlar
+- ✅ Admin'deki ~15 TypeScript hatası giderildi (`npx tsc --noEmit -p tsconfig.app.json` temiz).
+- ✅ Site Ayarları > Görünürlük: 10 anahtarın hepsi artık ana sayfada bir bölümü
+  açıp kapatıyor (önceden 8'inin sitede karşılığı yoktu).
+- ✅ Tarayıcıda uçtan uca test: PIN girişi ve kilit; ürün ekleme (görsel
+  yüklemeli), düzenleme, gizleme, silme; sipariş durumu, kargo kodu, not,
+  iptal, silme; yorum onaylama; mesajlar; site ayarları; Panel kartları ve
+  grafik; eski tarayıcı verisini aktarma; müşteri tarafında sipariş, yorum
+  ve iletişim formu. Gerçek Postgres ile, `npm start` üzerinden denendi.
+  Vercel + Neon üzerinde ilk kurulumdan sonra `/api/health` ile doğrulanmalı.
+
+## Bilinen eksikler / sonraki adımlar
+- `scripts/prerender.mjs` SEO önizleme sayfalarını hâlâ `src/data/products.json`'dan
+  üretiyor. Panelden eklenen yeni ürünler normal çalışır ama paylaşım
+  önizlemesi (og:image vb.) genel site bilgisini gösterir.
+- Sipariş durumu değişince müşteriye otomatik bildirim (e-posta/WhatsApp) yok.
+- Online ödeme yok; ödeme WhatsApp üzerinden konuşuluyor.
+- Kök dizindeki `style.css` sitede kullanılmıyor (asıl dosya `src/style.css`).
