@@ -1747,7 +1747,7 @@ function compressImageFile(file, {maxDim = 2000, quality = 0.92} = {}) {
 function Process(){
   return (
     <section id="process" className="process sectionSoft">
-      <div className="sectionHead narrow reveal"><p>SÜREÇ</p><h2>Üretim notları</h2><span>Bu alan varsayılan ana sayfadan kaldırıldı.</span></div>
+      <div className="sectionHead narrow reveal"><p>SÜREÇ</p><h2>Üretim notları</h2><span>Eskizden teslimata, her Ravun parçasının atölyedeki yolculuğu.</span></div>
       <div className="processGrid">{steps.map(([n,t,d,s])=><article key={n} className="stepCard reveal"><div className="stepTop"><strong>{n}</strong><span/></div><h3>{t}</h3><p>{d}</p><small>{s}</small></article>)}</div>
     </section>
   );
@@ -2348,7 +2348,7 @@ function BrandExperience({go}){
       <div className="brandExperienceCopy reveal">
         <p>RAVUN DİLİ</p>
         <h2>Sadece ürün değil,<br/><em>atölyeden çıkan bir iz.</em></h2>
-        <span>Site genelinde daha sakin geçişler, daha büyük görsel alanları ve daha net bilgi bloklarıyla premium mağaza hissi güçlendirildi.</span>
+        <span>Her parça; malzemesinin hikayesi, özenli paketlemesi ve bakım notuyla birlikte size ulaşır.</span>
         <button onClick={()=>go('story')}>Marka Hikayesini Aç ↗</button>
       </div>
       <div className="brandPillarGrid reveal">
@@ -2379,7 +2379,7 @@ function AtelierJournal(){
     ['Döküm','Zümrüt ton için daha sakin, açık pigment karışımı denendi.'],
     ['Paket','Keten sarım + deri etiketli hediye sunumu hazırlandı.']
   ];
-  return <section className="atelierJournal sectionSoft"><div className="journalInner reveal"><div><p>ATÖLYE GÜNLÜĞÜ</p><h2>Marka canlı<br/><em>görünsün.</em></h2><span>Bu alan, ileride admin panelden değiştirilebilir mini üretim notları için hazırlandı.</span></div><div className="journalCards">{notes.map(([t,d])=><article key={t}><b>{t}</b><p>{d}</p></article>)}</div></div></section>;
+  return <section className="atelierJournal sectionSoft"><div className="journalInner reveal"><div><p>ATÖLYE GÜNLÜĞÜ</p><h2>Atölyeden<br/><em>güncel notlar.</em></h2><span>Tezgâhta bu aralar neler oluyor: seçilen ahşaplar, denenen tonlar, hazırlanan paketler.</span></div><div className="journalCards">{notes.map(([t,d])=><article key={t}><b>{t}</b><p>{d}</p></article>)}</div></div></section>;
 }
 function ArchivePreview({products, goProduct}){
   const archived=useMemo(()=>sortProductsForStore(products.filter(productIsArchive)).slice(0,4),[products]);
@@ -2426,12 +2426,21 @@ function OrderTrustFlow({go}){
   );
 }
 /* ── ANA SAYFA ── */
+/* Site Ayarları > Görünürlük anahtarlarının her biri burada bir bölümü açıp kapatır. */
 function Home({add, go, goProduct, products, allReviews, favorites, toggleFav, settings}){
   return <>
     <Hero go={go} settings={settings}/>
     <Marquee/>
+    {settings?.showAtelierFeature&&<AtelierFeature settings={settings}/>}
     <HomeProducts add={add} go={go} goProduct={goProduct} products={products} allReviews={allReviews} favorites={favorites} toggleFav={toggleFav}/>
+    {settings?.showEditions&&<EditionsSection go={go}/>}
+    {settings?.showArchive!==false&&<ArchivePreview products={products.filter(p=>p.visible!==false)} goProduct={goProduct}/>}
     {settings?.showStoryPreview!==false&&<StoryPreview go={go}/>}
+    {settings?.showProcess&&<Process/>}
+    {settings?.showPromise&&<PremiumPromise/>}
+    {settings?.showTrustFlow&&<OrderTrustFlow go={go}/>}
+    {settings?.showBrandExperience&&<BrandExperience go={go}/>}
+    {settings?.showJournal&&<AtelierJournal/>}
     {settings?.showCta!==false&&<CTA go={go}/>}
   </>;
 }

@@ -28,22 +28,18 @@ import { ThemeSwitch } from '@/components/theme-switch'
 const CATEGORY_KEYS = ['tum', 'duvar-rafi', 'bicak-standi', 'masaustu', 'sunum-tahtasi', 'paketleme']
 
 // Sitede gerçekten bir bölümü açıp kapatan iki anahtar (bkz. main.jsx ~2467-2468)
-const ACTIVE_VISIBILITY_SWITCHES = [
-  ['showStoryPreview', 'Hikaye önizlemesi', 'Ana sayfada Hikaye önizlemesini gösterir.'],
-  ['showCta', 'Alt CTA bölümü', 'Ana sayfa altındaki CTA bölümünü gösterir.'],
-] as const
-
-// Şemada duran ama şu an sitede karşılığı olmayan (hiçbir komponente bağlı
-// olmayan veya hiç kullanılmayan komponentlere bağlı) anahtarlar
-const RESERVED_VISIBILITY_SWITCHES = [
-  ['showAtelierFeature', 'Atölye öne çıkan bölümü'],
-  ['showEditions', 'Sınırlı seri bölümü'],
-  ['showArchive', 'Arşiv önizlemesi'],
-  ['showPromise', 'Güven / vaat bölümü'],
-  ['showProcess', 'Süreç bölümü'],
-  ['showTrustFlow', 'Güven akışı bölümü'],
-  ['showBrandExperience', 'Marka deneyimi bölümü'],
-  ['showJournal', 'Günlük / blog bölümü'],
+// Her anahtar ana sayfada bir bölümü açıp kapatır (sıra, sitedeki sırayla aynı).
+const VISIBILITY_SWITCHES = [
+  ['showAtelierFeature', 'Atölye öne çıkan bölümü', 'Ürünlerin üstünde, üç görselli "Atölyeden" tanıtımı.'],
+  ['showEditions', 'Ravun sistemi', 'Signature / Hediye / Arşiv / Özel sipariş kartları.'],
+  ['showArchive', 'Arşiv önizlemesi', 'Satıldı veya Arşiv durumundaki ürünleri gösterir (böyle ürün yoksa hiç görünmez).'],
+  ['showStoryPreview', 'Hikaye önizlemesi', 'Hikaye sayfasına yönlendiren görselli bölüm.'],
+  ['showProcess', 'Üretim süreci', 'Tasarım → Döküm → Cilalama → Teslim adımları.'],
+  ['showPromise', 'Kısa vaatler', 'Üç kısa güven maddesi.'],
+  ['showTrustFlow', 'Sipariş akışı', 'Sipariş verme adımlarını anlatan bölüm.'],
+  ['showBrandExperience', 'Marka deneyimi', 'Atölye, paketleme, malzeme ve ürün hikayesi kartları.'],
+  ['showJournal', 'Atölye günlüğü', 'Kısa üretim notları.'],
+  ['showCta', 'Alt çağrı (CTA) bölümü', 'Sayfa sonundaki "Bize yazın" bandı.'],
 ] as const
 
 export function Settings() {
@@ -360,32 +356,16 @@ export function Settings() {
           <TabsContent value='gorunurluk' className='mt-4 space-y-4'>
             <Card>
               <CardHeader>
-                <CardTitle>Aktif bölümler</CardTitle>
-                <CardDescription>Bu anahtarlar şu anki sitede gerçekten bir bölümü açıp kapatıyor.</CardDescription>
+                <CardTitle>Ana sayfa bölümleri</CardTitle>
+                <CardDescription>Açık olan bölümler ana sayfada aşağıdaki sırayla gösterilir.</CardDescription>
               </CardHeader>
               <CardContent className='space-y-3'>
-                {ACTIVE_VISIBILITY_SWITCHES.map(([key, label, desc]) => (
-                  <div key={key} className='flex items-center justify-between rounded-md border p-3'>
+                {VISIBILITY_SWITCHES.map(([key, label, desc]) => (
+                  <div key={key} className='flex items-center justify-between gap-4 rounded-md border p-3'>
                     <div>
                       <p className='text-sm font-medium'>{label}</p>
                       <p className='text-muted-foreground text-xs'>{desc}</p>
                     </div>
-                    <Switch checked={Boolean(form[key])} onCheckedChange={set(key)} />
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Ayrılmış anahtarlar</CardTitle>
-                <CardDescription>
-                  Bu anahtarların şu an sitede karşılığı yok — ileride kullanılmak üzere burada duruyor, değiştirilmesi sitede görsel bir etki yapmaz.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='space-y-3'>
-                {RESERVED_VISIBILITY_SWITCHES.map(([key, label]) => (
-                  <div key={key} className='flex items-center justify-between rounded-md border p-3'>
-                    <p className='text-sm font-medium'>{label}</p>
                     <Switch checked={Boolean(form[key])} onCheckedChange={set(key)} />
                   </div>
                 ))}

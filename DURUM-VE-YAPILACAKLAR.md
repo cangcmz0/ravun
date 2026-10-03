@@ -91,6 +91,17 @@ npm install
 npm run dev               # site + panel + API birlikte (Vite içinde)
 ```
 
+## Eski listeden kapananlar
+- ✅ Admin'deki ~15 TypeScript hatası giderildi (`npx tsc --noEmit -p tsconfig.app.json` temiz).
+- ✅ Site Ayarları > Görünürlük: 10 anahtarın hepsi artık ana sayfada bir bölümü
+  açıp kapatıyor (önceden 8'inin sitede karşılığı yoktu).
+- ✅ Tarayıcıda uçtan uca test: PIN girişi ve kilit; ürün ekleme (görsel
+  yüklemeli), düzenleme, gizleme, silme; sipariş durumu, kargo kodu, not,
+  iptal, silme; yorum onaylama; mesajlar; site ayarları; Panel kartları ve
+  grafik; eski tarayıcı verisini aktarma; müşteri tarafında sipariş, yorum
+  ve iletişim formu. Gerçek Postgres ile, `npm start` üzerinden denendi.
+  Vercel + Neon üzerinde ilk kurulumdan sonra `/api/health` ile doğrulanmalı.
+
 ## Bilinen eksikler / sonraki adımlar
 - `scripts/prerender.mjs` SEO önizleme sayfalarını hâlâ `src/data/products.json`'dan
   üretiyor. Panelden eklenen yeni ürünler normal çalışır ama paylaşım
