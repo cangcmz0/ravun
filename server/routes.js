@@ -437,7 +437,14 @@ export async function route(req) {
     if (seg[0] === 'health') {
       const p = await db()
       await p.query('SELECT 1')
-      return json(200, { ok: true, admin: adminConfigured() }, NO_STORE)
+      // Gizli bilgi içermeyen teşhis alanları: hangi ortam/commit/bölgede çalışıldığı.
+      return json(200, {
+        ok: true,
+        admin: adminConfigured(),
+        env: process.env.VERCEL_ENV || 'local',
+        commit: String(process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null,
+        region: process.env.VERCEL_REGION || null,
+      }, NO_STORE)
     }
     if (seg[0] === 'catalog' && m === 'GET') return await getCatalog()
     if (seg[0] === 'orders' && m === 'POST' && seg.length === 1) return await createOrder(req)
