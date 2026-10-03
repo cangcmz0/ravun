@@ -178,7 +178,7 @@ export function Reviews() {
         <div className='mb-4 flex flex-wrap items-center justify-between gap-2'>
           <div>
             <h1 className='text-2xl font-bold tracking-tight'>Yorumlar</h1>
-            <p className='text-muted-foreground text-sm'>{flat.length} yorum · site ile aynı veriyi kullanır</p>
+            <p className='text-muted-foreground text-sm'>{flat.length} yorum</p>
           </div>
         </div>
 
@@ -212,7 +212,44 @@ export function Reviews() {
           )}
         </div>
 
-        <div className='overflow-x-auto rounded-md border'>
+        {/* ── Mobil: kart listesi ── */}
+        <div className='grid gap-3 md:hidden'>
+          {!loaded ? (
+            <p className='text-muted-foreground py-10 text-center text-sm'>Yükleniyor…</p>
+          ) : loadError ? (
+            <p className='text-destructive py-10 text-center text-sm'>{loadError}</p>
+          ) : filtered.length === 0 ? (
+            <p className='text-muted-foreground py-10 text-center text-sm'>{flat.length === 0 ? 'Henüz yorum yok.' : 'Yorum bulunamadı.'}</p>
+          ) : filtered.map((r) => {
+            const k = key(r)
+            return (
+              <div key={k} className={`rounded-lg border bg-card p-3 ${r.approved === false ? 'border-amber-300 dark:border-amber-800' : ''} ${selected.includes(k) ? 'ring-2 ring-primary' : ''}`}>
+                <div className='flex items-start justify-between gap-2'>
+                  <div className='flex min-w-0 items-center gap-2'>
+                    {r.productImage && <img src={r.productImage} alt='' className='size-9 shrink-0 rounded-md border object-cover' />}
+                    <div className='min-w-0'>
+                      <p className='truncate text-sm font-medium'>{r.name}</p>
+                      <p className='text-muted-foreground truncate text-xs'>{r.productTitle} · {r.date}</p>
+                    </div>
+                  </div>
+                  <Checkbox checked={selected.includes(k)} onCheckedChange={() => toggleSelect(k)} aria-label={`${r.name} seç`} />
+                </div>
+                <div className='mt-2'><Stars rating={r.rating} /></div>
+                <p className='mt-1 text-sm whitespace-pre-line'>{r.text}</p>
+                <div className='mt-3 flex items-center justify-between gap-2 border-t pt-3'>
+                  <label className='flex items-center gap-2 text-sm'>
+                    <Switch checked={r.approved !== false} onCheckedChange={() => toggleApproved(r)} aria-label='Onaylı' />
+                    {r.approved !== false ? 'Yayında' : 'Onay bekliyor'}
+                  </label>
+                  <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(r)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* ── Masaüstü: tablo ── */}
+        <div className='hidden overflow-x-auto rounded-md border md:block'>
           <Table>
             <TableHeader>
               <TableRow>

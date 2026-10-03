@@ -1119,6 +1119,13 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
   const zoomScrollYRef=useRef(0);
   const swipeRef=useRef({x:0,y:0,until:0});
   const [activeImg,setActiveImg]=useState(0);
+  // Ana fotoğraf kutusu fotoğrafın kendi oranını alır (aşırı uç oranlar sınırlanır),
+  // böylece fotoğraf kırpılmadan ve etrafında boş şerit kalmadan tam oturur.
+  const [imgRatio,setImgRatio]=useState(1);
+  const onMainImgLoad=e=>{
+    const {naturalWidth:w,naturalHeight:h}=e.currentTarget;
+    if(w&&h) setImgRatio(Math.min(1.6,Math.max(0.8,w/h)));
+  };
   const [selColor,setSelColor]=useState(0);
   const [selSize,setSelSize]=useState(0);
   const [tab,setTab]=useState('details');
@@ -1223,11 +1230,12 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
         </nav>
         <div className="pdLayout">
           <div className="pdGallery reveal">
-            <div className="pdMainImg"
+            <div className="pdMainImg" style={{'--pd-ratio':imgRatio}}
               onTouchStart={handleGalleryTouchStart}
               onTouchEnd={handleGalleryTouchEnd}
               onClick={handleMainImageClick}>
-              <img key={activeImg} src={activeSrc} alt={product.title} draggable={false} decoding="async" fetchpriority="high"/>
+              <img className="pdMainBlur" src={activeSrc} alt="" aria-hidden="true" draggable={false}/>
+              <img key={activeImg} className="pdMainPhoto" src={activeSrc} alt={product.title} draggable={false} decoding="async" fetchpriority="high" onLoad={onMainImgLoad}/>
               {detailPoints.map((point,i)=>(
                 <button key={`${point.title}-${i}`} className="pdDetailMarker" style={{left:`${point.x}%`,top:`${point.y}%`}} onClick={e=>e.stopPropagation()} aria-label={`${point.title}: ${point.text}`}>
                   <span>{i+1}</span><b><em>{point.title}</em><small>{point.text}</small></b>

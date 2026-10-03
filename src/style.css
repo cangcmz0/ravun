@@ -11551,3 +11551,114 @@ body.modal-open{
   font-size:15px;
   letter-spacing:.04em;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   ÜRÜN FOTOĞRAFLARI — TEK VE SON KURAL SETİ (v108)
+   Önceki katmanlarda fotoğraflar farklı oranlı kutulara "contain" +
+   iç boşlukla sığdırılıyordu; yatay fotoğrafın altında/üstünde büyük
+   boş bej şeritler kalıyor, fotoğraf karta oturmuyordu (özellikle
+   mobilde). Artık:
+   • Liste kartları (ana sayfa, koleksiyon, favoriler, benzer ürünler,
+     arşiv) tek oranda (4:3) ve fotoğraf çerçeveyi kenardan kenara doldurur.
+   • Ürün detayında kutu fotoğrafın kendi oranını alır (JS: --pd-ratio),
+     fotoğraf kırpılmaz; sınır dışı oranlarda boşluk, aynı fotoğrafın
+     bulanık hali ile doldurulur.
+   Bu blok dosyanın sonunda durmalı (önceki !important kuralları ezer).
+   ══════════════════════════════════════════════════════════════════ */
+html body .photoWrap,
+html body .collectionFull .photoWrap,
+html body .gridProducts .photoWrap,
+html body .galleryCardImg,
+html body .pdRelatedImg,
+html body .archiveImg{
+  position:relative !important;
+  aspect-ratio:4 / 3 !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  padding:0 !important;
+  overflow:hidden !important;
+  background:#E7DECD !important;
+}
+html body .photoWrap img,
+html body .photoWrap .cardImg,
+html body .photoWrap .primaryImg,
+html body .productCard .photoWrap img.cardImg.primaryImg,
+html body .galleryCardImg img,
+html body .pdRelatedImg img,
+html body .archiveImg img{
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  max-width:none !important;
+  padding:0 !important;
+  margin:0 !important;
+  object-fit:cover !important;
+  object-position:center !important;
+  border-radius:0 !important;
+  box-sizing:border-box !important;
+}
+@media (hover:hover){
+  html body .productCard:hover .photoWrap img,
+  html body .galleryCard:hover .galleryCardImg img,
+  html body .pdRelatedCard:hover .pdRelatedImg img{
+    transform:scale(1.04) !important;
+  }
+}
+/* Arama sonuçları ve sepet küçük görselleri: kare, tam dolu */
+html body .searchItem img,
+html body .cartItem img{
+  aspect-ratio:1 / 1 !important;
+  object-fit:cover !important;
+  padding:0 !important;
+  background:#E7DECD !important;
+}
+
+/* ── Ürün detay ana fotoğraf ── */
+html body .productDetailPage .pdMainImg{
+  aspect-ratio:var(--pd-ratio, 1) !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:min(78vh, 760px);
+  padding:0 !important;
+  background:#E7DECD !important;
+  isolation:isolate;
+}
+html body .productDetailPage .pdMainImg .pdMainPhoto{
+  position:absolute !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  padding:0 !important;
+  object-fit:contain !important;
+  object-position:center !important;
+  z-index:1;
+}
+html body .productDetailPage .pdMainImg .pdMainBlur{
+  position:absolute !important;
+  inset:-24px !important;
+  width:calc(100% + 48px) !important;
+  height:calc(100% + 48px) !important;
+  object-fit:cover !important;
+  filter:blur(26px) saturate(1.05) brightness(1.02);
+  opacity:.7;
+  z-index:0;
+  pointer-events:none;
+}
+html body .productDetailPage .pdMainImg > *:not(img){
+  z-index:2;
+}
+/* Detay küçük resimleri: kare, tam dolu */
+html body .pdThumb img{
+  width:100% !important;
+  height:100% !important;
+  object-fit:cover !important;
+  padding:0 !important;
+}
+/* Kart köşeleri fotoğrafı da kırpsın (fotoğraf üst köşelerden taşmasın) */
+html body .productCard,
+html body .galleryCard,
+html body .archiveCard{
+  overflow:hidden !important;
+}

@@ -168,7 +168,7 @@ export function ProductFormDialog({
       for (const file of Array.from(files).slice(0, 12)) {
         if (!file.type.startsWith('image/')) continue
         try {
-          compressed.push(await uploadImage(await compressImageFile(file)))
+          compressed.push(await uploadImage(await compressImageFile(file, { pad: false })))
         } catch (err) {
           toast.error(`${file.name} yüklenemedi: ${errorMessage(err)}`)
         }
@@ -278,7 +278,7 @@ export function ProductFormDialog({
         </DialogHeader>
 
         <Tabs defaultValue='temel' className='flex-1 overflow-hidden'>
-          <TabsList className='w-full flex-wrap justify-start'>
+          <TabsList className='w-full justify-start overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&>button]:flex-none'>
             <TabsTrigger value='temel'>Temel</TabsTrigger>
             <TabsTrigger value='secenekler'>Seçenekler</TabsTrigger>
             <TabsTrigger value='gorseller'>
@@ -391,10 +391,10 @@ export function ProductFormDialog({
                 <ImagePlus className='size-4' /> {uploading ? 'Yükleniyor…' : 'Görsel ekle'}
               </Button>
               <p className='text-xs text-muted-foreground'>
-                İlk görsel kapak fotoğrafı olarak kullanılır. Yüklenen görseller otomatik olarak doğru
-                yönde döndürülür, kaliteden ödün vermeden sıkıştırılır ve fotoğrafın hiçbir yeri
-                kırpılmadan kare bir alana ortalanır — böylece hangi oranda çekilmiş olursa olsun
-                sitedeki kart alanına düzgünce oturur.
+                İlk görsel kapak fotoğrafı olarak kullanılır. Görseller otomatik olarak doğru yönde
+                döndürülür ve kaliteden ödün vermeden sıkıştırılır. Sitedeki ürün kartları 4:3 oranındadır
+                ve fotoğraf kartı kenardan kenara doldurur; en iyi sonuç için ürünü kadrajın ortasında,
+                yatay (ya da kareye yakın) çekin. Ürün sayfasında fotoğraf kırpılmadan, tamamı gösterilir.
               </p>
               {form.gallery.length === 0 ? (
                 <div className='rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground'>
