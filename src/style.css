@@ -12059,3 +12059,35 @@ html body .cartLayer .drawer.cx{
 }
 /* Sepet açıkken bildirim alttaki butonların üstüne binmesin */
 html body .toast.toastTop{ top:16px !important; bottom:auto !important; z-index:300 !important; }
+
+/* Tek kaydırma çubuğu: sayfa kutularında overflow-x:hidden, overflow-y'yi de
+   "auto"ya çevirip içerik birkaç piksel taşınca ikinci bir kaydırma çubuğu
+   çıkarıyordu (ör. ürün sayfası). "clip" kaydırma alanı oluşturmaz; ayrıca
+   masaüstünde galerinin ekranda sabit kalmasını (sticky) da bozmaz. */
+html body .page,
+html body main.page{
+  overflow-x:clip !important;
+  overflow-y:visible !important;
+}
+/* Aynı nedenle body ve #root da kaydırma alanı olmasın (sticky en yakın
+   kaydırma alanına bağlanır; bunlar hiç kaydırılmadığı için sticky çalışmıyordu). */
+html body,
+html body > #root{
+  overflow-x:clip !important;
+  overflow-y:visible !important;
+}
+/* Kaydırma kilidi (sepet / menü / arama / yakınlaştırma açıkken):
+   eski kilit body yüksekliğini ekran boyuna indiriyordu → açılınca sayfa en üste
+   atlıyor, kapanınca konum kayboluyordu; touch-action:none ise telefonda
+   çekmecenin içindeki kaydırmayı da engelleyebiliyordu. Artık yalnızca gerçek
+   kaydırma alanı (html) kilitlenir; konum korunur. */
+html body.modal-open{
+  height:auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+  touch-action:auto !important;
+}
+html:has(body.modal-open){
+  overflow:hidden !important;
+  overscroll-behavior:none;
+}

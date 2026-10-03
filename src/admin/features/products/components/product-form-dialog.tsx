@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { ImagePlus, Plus, Star, Trash2, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   CATEGORIES,
@@ -8,7 +8,7 @@ import {
   compressImageFile,
 } from '@/lib/ravun-data'
 import { errorMessage, uploadImage } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import { GalleryEditor } from './gallery-editor'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -111,8 +111,8 @@ export function ProductFormDialog({
   onSave,
 }: ProductFormDialogProps) {
   const [form, setForm] = useState(() => emptyForm(nextId, nextSortOrder))
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [uploading, setUploading] = useState(false)
+  const [pendingUploads, setPendingUploads] = useState(0)
+  const uploading = pendingUploads > 0
   const isEdit = Boolean(product)
 
   useEffect(() => {
@@ -132,7 +132,8 @@ export function ProductFormDialog({
         materials: Array.isArray(product.materials) ? product.materials : [],
         sizes: Array.isArray(product.sizes) && product.sizes.length ? product.sizes : ['Standart'],
         colorRows: toColorRows(product.colors, product.colorNames),
-        gallery: Array.isArray(product.gallery) && product.gallery.length ? product.gallery : (product.image ? [product.image] : []),
+        // Aynı fotoğraf galeride iki kez durmasın (sürükle-bırak fotoğrafları adresinden tanır)
+        gallery: [...new Set<string>(Array.isArray(product.gallery) && product.gallery.length ? product.gallery : (product.image ? [product.image] : []))],
         desc: product.desc || '',
         longDesc: product.longDesc || '',
         story: product.story || '',
@@ -159,46 +160,23 @@ export function ProductFormDialog({
   const set = <K extends string>(key: K) => (value: any) =>
     setForm((f) => ({ ...f, [key]: value }))
 
-  const handleFiles = async (files: FileList | null) => {
-    if (!files || !files.length) return
-    setUploading(true)
-    try {
-      // Görsel sıkıştırılıp hemen sunucuya yüklenir; ürüne yalnızca kısa adresi yazılır.
-      const compressed: string[] = []
-      for (const file of Array.from(files).slice(0, 12)) {
-        if (!file.type.startsWith('image/')) continue
-        try {
-          compressed.push(await uploadImage(await compressImageFile(file, { pad: false })))
-        } catch (err) {
-          toast.error(`${file.name} yüklenemedi: ${errorMessage(err)}`)
-        }
+  // Seçilen/bırakılan fotoğraflar sırayla sıkıştırılıp sunucuya yüklenir; her biri
+  // bitince galerinin sonuna eklenir (yüklenirken yerinde bekleme kutusu görünür).
+  const handleFiles = async (files: File[]) => {
+    const list = files.slice(0, 12)
+    if (!list.length) return
+    setPendingUploads((n) => n + list.length)
+    for (const file of list) {
+      try {
+        const url = await uploadImage(await compressImageFile(file, { pad: false }))
+        setForm((f) => ({ ...f, gallery: f.gallery.includes(url) ? f.gallery : [...f.gallery, url] }))
+      } catch (err) {
+        toast.error(`${file.name} yüklenemedi: ${errorMessage(err)}`)
+      } finally {
+        setPendingUploads((n) => Math.max(0, n - 1))
       }
-      if (compressed.length) {
-        setForm((f) => ({ ...f, gallery: [...f.gallery, ...compressed] }))
-      }
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
-
-  const removeImage = (idx: number) =>
-    setForm((f) => ({ ...f, gallery: f.gallery.filter((_, i) => i !== idx) }))
-  const makeCover = (idx: number) =>
-    setForm((f) => {
-      const g = [...f.gallery]
-      const [img] = g.splice(idx, 1)
-      g.unshift(img)
-      return { ...f, gallery: g }
-    })
-  const moveImage = (idx: number, dir: -1 | 1) =>
-    setForm((f) => {
-      const g = [...f.gallery]
-      const j = idx + dir
-      if (j < 0 || j >= g.length) return f
-      ;[g[idx], g[j]] = [g[j], g[idx]]
-      return { ...f, gallery: g }
-    })
 
   const setColorRow = (idx: number, patch: Partial<ColorRow>) =>
     setForm((f) => ({
@@ -379,51 +357,18 @@ export function ProductFormDialog({
             </TabsContent>
 
             <TabsContent value='gorseller' className='mt-0 space-y-3'>
-              <input
-                ref={fileInputRef}
-                type='file'
-                accept='image/*'
-                multiple
-                className='hidden'
-                onChange={(e) => handleFiles(e.target.files)}
+              <GalleryEditor
+                images={form.gallery}
+                onChange={(gallery) => setForm((f) => ({ ...f, gallery }))}
+                onFiles={handleFiles}
+                pending={pendingUploads}
               />
-              <Button type='button' variant='outline' onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                <ImagePlus className='size-4' /> {uploading ? 'Yükleniyor…' : 'Görsel ekle'}
-              </Button>
               <p className='text-xs text-muted-foreground'>
-                İlk görsel kapak fotoğrafı olarak kullanılır. Görseller otomatik olarak doğru yönde
-                döndürülür ve kaliteden ödün vermeden sıkıştırılır. Sitedeki ürün kartları 4:3 oranındadır
-                ve fotoğraf kartı kenardan kenara doldurur; en iyi sonuç için ürünü kadrajın ortasında,
-                yatay (ya da kareye yakın) çekin. Ürün sayfasında fotoğraf kırpılmadan, tamamı gösterilir.
+                Görseller otomatik olarak doğru yönde döndürülür ve kaliteden ödün vermeden sıkıştırılır.
+                Sitedeki ürün kartları 4:3 oranındadır ve fotoğraf kartı kenardan kenara doldurur; en iyi
+                sonuç için ürünü kadrajın ortasında, yatay (ya da kareye yakın) çekin. Ürün sayfasında
+                fotoğrafın tamamı gösterilir.
               </p>
-              {form.gallery.length === 0 ? (
-                <div className='rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground'>
-                  Henüz görsel eklenmedi.
-                </div>
-              ) : (
-                <div className='grid grid-cols-2 gap-3 sm:grid-cols-3'>
-                  {form.gallery.map((src, i) => (
-                    <div key={i} className={cn('group relative overflow-hidden rounded-md border', i === 0 && 'ring-2 ring-primary')}>
-                      <img src={src} alt={`Görsel ${i + 1}`} className='aspect-square w-full object-cover' />
-                      {i === 0 && (
-                        <span className='absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground'>Kapak</span>
-                      )}
-                      <div className='absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/60 p-1'>
-                        <button type='button' onClick={() => moveImage(i, -1)} disabled={i === 0} className='rounded px-1 text-xs text-white disabled:opacity-30' aria-label='Sola taşı'>‹</button>
-                        {i !== 0 && (
-                          <button type='button' onClick={() => makeCover(i)} className='rounded p-0.5 text-white' aria-label='Kapak yap' title='Kapak yap'>
-                            <Star className='size-3.5' />
-                          </button>
-                        )}
-                        <button type='button' onClick={() => moveImage(i, 1)} disabled={i === form.gallery.length - 1} className='rounded px-1 text-xs text-white disabled:opacity-30' aria-label='Sağa taşı'>›</button>
-                        <button type='button' onClick={() => removeImage(i)} className='rounded p-0.5 text-white' aria-label='Görseli sil' title='Sil'>
-                          <X className='size-3.5' />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
             </TabsContent>
 
             <TabsContent value='detay' className='mt-0 space-y-4'>

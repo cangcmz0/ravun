@@ -1,6 +1,24 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Eye, EyeOff, ImageOff, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, GripVertical, ImageOff, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   CATEGORIES,
   PRODUCT_STATUS,
@@ -140,19 +158,24 @@ export function Products() {
   const toggleVisible = (p: any) => persist(products.map((x) => (x.id === p.id ? { ...x, visible: !x.visible } : x)))
   const toggleHome = (p: any) => persist(products.map((x) => (x.id === p.id ? { ...x, homeVisible: !x.homeVisible } : x)))
 
-  const moveSort = (p: any, dir: -1 | 1) => {
-    const idx = sorted.findIndex((x) => x.id === p.id)
-    const swapIdx = idx + dir
-    if (swapIdx < 0 || swapIdx >= sorted.length) return
-    const a = sorted[idx]
-    const b = sorted[swapIdx]
-    const aOrder = Number(a.sortOrder) || Number(a.id) || 0
-    const bOrder = Number(b.sortOrder) || Number(b.id) || 0
-    persist(products.map((x) => {
-      if (x.id === a.id) return { ...x, sortOrder: bOrder }
-      if (x.id === b.id) return { ...x, sortOrder: aOrder }
-      return x
-    }))
+  // ── Sürükle-bırak sıralama ──
+  // Filtre açıkken listenin bir kısmı gizli olduğundan sıralama yalnızca tüm
+  // ürünler görünürken yapılır. Bırakınca sıra 10, 20, 30… olarak yeniden yazılır.
+  const canReorder = !query.trim() && categoryFilter === 'Tümü'
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+  const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    if (!canReorder || !over || active.id === over.id) return
+    const from = sorted.findIndex((x) => x.id === active.id)
+    const to = sorted.findIndex((x) => x.id === over.id)
+    if (from < 0 || to < 0) return
+    const order = new Map(arrayMove(sorted, from, to).map((x, i) => [x.id, (i + 1) * 10]))
+    if (await persist(products.map((x) => ({ ...x, sortOrder: order.get(x.id) ?? x.sortOrder })))) {
+      toast.success('Sıralama kaydedildi')
+    }
   }
 
   return (
@@ -194,6 +217,13 @@ export function Products() {
           )}
         </div>
 
+        <p className='text-muted-foreground mb-3 text-xs'>
+          {canReorder
+            ? 'Sıralamayı değiştirmek için ürünü soldaki tutamaçtan (⋮⋮) tutup sürükleyin; sitedeki sıra da değişir.'
+            : 'Sıralamayı değiştirmek için arama ve kategori filtresini kaldırın.'}
+        </p>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={filtered.map((p) => p.id)} strategy={verticalListSortingStrategy}>
         {/* ── Mobil: kart listesi ── */}
         <div className='grid gap-3 md:hidden'>
           {!loaded ? (
@@ -205,8 +235,10 @@ export function Products() {
           ) : filtered.map((p, i) => {
             const meta = PRODUCT_STATUS[normalizeProductStatus(p.status, p)]
             return (
-              <div key={p.id} className={`rounded-lg border bg-card p-3 ${selected.includes(p.id) ? 'ring-2 ring-primary' : ''}`}>
+              <SortableItem key={p.id} id={p.id} disabled={!canReorder} className={`rounded-lg border bg-card p-3 ${selected.includes(p.id) ? 'ring-2 ring-primary' : ''}`}>
+                {(handle) => (<>
                 <div className='flex gap-3'>
+                  <DragHandle handle={handle} disabled={!canReorder} className='-ms-1 self-center' />
                   {p.image ? (
                     <img src={p.image} alt={p.title} className='size-16 shrink-0 rounded-md border object-cover' />
                   ) : (
@@ -233,13 +265,12 @@ export function Products() {
                     <label className='flex items-center gap-2'><Switch checked={!!p.homeVisible} onCheckedChange={() => toggleHome(p)} aria-label='Ana sayfada göster' />Ana sayfa</label>
                   </div>
                   <div className='flex items-center gap-1'>
-                    <Button variant='ghost' size='icon' className='size-8' disabled={i === 0} onClick={() => moveSort(p, -1)} aria-label='Yukarı taşı'>↑</Button>
-                    <Button variant='ghost' size='icon' className='size-8' disabled={i === filtered.length - 1} onClick={() => moveSort(p, 1)} aria-label='Aşağı taşı'>↓</Button>
                     <Button variant='ghost' size='icon' onClick={() => openEdit(p)} aria-label='Düzenle'><Pencil className='size-4' /></Button>
                     <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(p)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
                   </div>
                 </div>
-              </div>
+                </>)}
+              </SortableItem>
             )
           })}
         </div>
@@ -249,6 +280,7 @@ export function Products() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className='w-8' aria-label='Sırala' />
                 <TableHead className='w-10'>
                   <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} aria-label='Tümünü seç' />
                 </TableHead>
@@ -258,7 +290,7 @@ export function Products() {
                 <TableHead>Durum</TableHead>
                 <TableHead className='text-center'>Görünür</TableHead>
                 <TableHead className='text-center'>Ana Sayfa</TableHead>
-                <TableHead className='text-center'>Sıra</TableHead>
+
                 <TableHead className='text-end'>İşlemler</TableHead>
               </TableRow>
             </TableHeader>
@@ -273,7 +305,9 @@ export function Products() {
                 const key = normalizeProductStatus(p.status, p)
                 const meta = PRODUCT_STATUS[key]
                 return (
-                  <TableRow key={p.id} data-state={selected.includes(p.id) ? 'selected' : undefined}>
+                  <SortableItem as='tr' key={p.id} id={p.id} disabled={!canReorder} className='hover:bg-muted/50 border-b transition-colors data-[state=selected]:bg-muted' dataState={selected.includes(p.id) ? 'selected' : undefined}>
+                    {(handle) => (<>
+                    <TableCell className='w-8 pe-0'><DragHandle handle={handle} disabled={!canReorder} /></TableCell>
                     <TableCell><Checkbox checked={selected.includes(p.id)} onCheckedChange={() => toggleSelect(p.id)} aria-label={`${p.title} seç`} /></TableCell>
                     <TableCell>
                       <div className='flex items-center gap-3'>
@@ -296,24 +330,21 @@ export function Products() {
                     </TableCell>
                     <TableCell className='text-center'><Switch checked={p.visible !== false} onCheckedChange={() => toggleVisible(p)} aria-label='Sitede görünür' /></TableCell>
                     <TableCell className='text-center'><Switch checked={!!p.homeVisible} onCheckedChange={() => toggleHome(p)} aria-label='Ana sayfada göster' /></TableCell>
-                    <TableCell className='text-center'>
-                      <div className='flex items-center justify-center gap-0.5'>
-                        <Button variant='ghost' size='icon' className='size-6' disabled={i === 0} onClick={() => moveSort(p, -1)}>↑</Button>
-                        <Button variant='ghost' size='icon' className='size-6' disabled={i === filtered.length - 1} onClick={() => moveSort(p, 1)}>↓</Button>
-                      </div>
-                    </TableCell>
                     <TableCell className='text-end'>
                       <div className='flex items-center justify-end gap-1'>
                         <Button variant='ghost' size='icon' onClick={() => openEdit(p)} aria-label='Düzenle'><Pencil className='size-4' /></Button>
                         <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(p)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
                       </div>
                     </TableCell>
-                  </TableRow>
+                    </>)}
+                  </SortableItem>
                 )
               })}
             </TableBody>
           </Table>
         </div>
+        </SortableContext>
+        </DndContext>
       </Main>
 
       <ProductFormDialog
@@ -346,5 +377,46 @@ export function Products() {
         handleConfirm={handleBulkDelete}
       />
     </>
+  )
+}
+
+// Sürüklenebilir satır/kart sarmalayıcı: tutamaç özelliklerini (handle) çocuğa verir.
+function SortableItem({ id, disabled, className, as = 'div', dataState, children }: {
+  id: number
+  disabled?: boolean
+  className?: string
+  as?: 'div' | 'tr'
+  dataState?: string
+  children: (handle: Record<string, any>) => React.ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled })
+  const style: React.CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    position: 'relative',
+    zIndex: isDragging ? 20 : undefined,
+    boxShadow: isDragging ? '0 12px 30px rgba(0,0,0,.18)' : undefined,
+    background: isDragging ? 'var(--card)' : undefined,
+  }
+  const Tag = as as any
+  return (
+    <Tag ref={setNodeRef} style={style} className={className} data-state={dataState}>
+      {children({ ...attributes, ...listeners })}
+    </Tag>
+  )
+}
+
+function DragHandle({ handle, disabled, className = '' }: { handle: Record<string, any>; disabled?: boolean; className?: string }) {
+  return (
+    <button
+      type='button'
+      {...handle}
+      disabled={disabled}
+      aria-label='Sıralamak için sürükleyin'
+      title={disabled ? 'Sıralamak için filtreyi kaldırın' : 'Sıralamak için sürükleyin'}
+      className={`text-muted-foreground hover:bg-muted grid size-8 shrink-0 place-items-center rounded-md touch-none ${disabled ? 'cursor-not-allowed opacity-30' : 'cursor-grab active:cursor-grabbing'} ${className}`}
+    >
+      <GripVertical className='size-4' />
+    </button>
   )
 }
