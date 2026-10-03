@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ImagePlus, Plus, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   CATEGORIES,
   PRODUCT_STATUS,
-  STORAGE_BUDGET_BYTES,
   certificateNo as buildCertificateNo,
   compressImageFile,
-  estimateStoredSize,
 } from '@/lib/ravun-data'
+import { errorMessage, uploadImage } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -99,7 +98,7 @@ type ProductFormDialogProps = {
   product: any | null // null = yeni ürün
   nextId: number
   nextSortOrder: number
-  onSave: (product: any) => boolean
+  onSave: (product: any) => Promise<boolean>
   allProducts?: any[]
 }
 
@@ -110,7 +109,6 @@ export function ProductFormDialog({
   nextId,
   nextSortOrder,
   onSave,
-  allProducts = [],
 }: ProductFormDialogProps) {
   const [form, setForm] = useState(() => emptyForm(nextId, nextSortOrder))
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -161,29 +159,18 @@ export function ProductFormDialog({
   const set = <K extends string>(key: K) => (value: any) =>
     setForm((f) => ({ ...f, [key]: value }))
 
-  // Bu ürün kaydedilirse tüm ürün verisinin (görseller dahil) kaplayacağı
-  // yeri canlı tahmin eder — panelin paylaştığı depolama kotasına göre.
-  const storageUsage = useMemo(() => {
-    const preview = { ...(product || {}), id: form.id, gallery: form.gallery, image: form.gallery[0] }
-    const exists = allProducts.some((p) => p.id === preview.id)
-    const projected = exists
-      ? allProducts.map((p) => (p.id === preview.id ? preview : p))
-      : [...allProducts, preview]
-    const bytes = estimateStoredSize(projected)
-    return { bytes, ratio: Math.min(1, bytes / STORAGE_BUDGET_BYTES) }
-  }, [allProducts, product, form.id, form.gallery])
-
   const handleFiles = async (files: FileList | null) => {
     if (!files || !files.length) return
     setUploading(true)
     try {
+      // Görsel sıkıştırılıp hemen sunucuya yüklenir; ürüne yalnızca kısa adresi yazılır.
       const compressed: string[] = []
       for (const file of Array.from(files).slice(0, 12)) {
         if (!file.type.startsWith('image/')) continue
         try {
-          compressed.push(await compressImageFile(file))
-        } catch {
-          toast.error(`${file.name} işlenemedi, atlandı.`)
+          compressed.push(await uploadImage(await compressImageFile(file)))
+        } catch (err) {
+          toast.error(`${file.name} yüklenemedi: ${errorMessage(err)}`)
         }
       }
       if (compressed.length) {
@@ -223,7 +210,9 @@ export function ProductFormDialog({
   const removeColorRow = (idx: number) =>
     setForm((f) => ({ ...f, colorRows: f.colorRows.filter((_, i) => i !== idx) }))
 
-  const handleSubmit = () => {
+  const [saving, setSaving] = useState(false)
+  const handleSubmit = async () => {
+    if (saving || uploading) return
     const title = form.title.trim()
     if (!title) {
       toast.error('Ürün adı zorunlu.')
@@ -272,7 +261,9 @@ export function ProductFormDialog({
       giftEligible: form.giftEligible,
       sortOrder: form.sortOrder,
     }
-    const ok = onSave(finalProduct)
+    setSaving(true)
+    const ok = await onSave(finalProduct)
+    setSaving(false)
     if (ok) onOpenChange(false)
   }
 
@@ -405,21 +396,6 @@ export function ProductFormDialog({
                 kırpılmadan kare bir alana ortalanır — böylece hangi oranda çekilmiş olursa olsun
                 sitedeki kart alanına düzgünce oturur.
               </p>
-              <div className='space-y-1'>
-                <div className='h-1.5 w-full overflow-hidden rounded-full bg-muted'>
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all',
-                      storageUsage.ratio > 0.9 ? 'bg-destructive' : storageUsage.ratio > 0.7 ? 'bg-amber-500' : 'bg-primary'
-                    )}
-                    style={{ width: `${Math.max(2, storageUsage.ratio * 100)}%` }}
-                  />
-                </div>
-                <p className={cn('text-xs', storageUsage.ratio > 0.9 ? 'text-destructive' : 'text-muted-foreground')}>
-                  Depolama kullanımı: {(storageUsage.bytes / 1_000_000).toFixed(1)} MB / {(STORAGE_BUDGET_BYTES / 1_000_000).toFixed(1)} MB
-                  {storageUsage.ratio > 0.9 && ' — dolmak üzere, birkaç görsel silmeniz gerekebilir.'}
-                </p>
-              </div>
               {form.gallery.length === 0 ? (
                 <div className='rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground'>
                   Henüz görsel eklenmedi.
@@ -534,7 +510,7 @@ export function ProductFormDialog({
 
         <DialogFooter>
           <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>Vazgeç</Button>
-          <Button type='button' onClick={handleSubmit}>{isEdit ? 'Kaydet' : 'Ürünü Ekle'}</Button>
+          <Button type='button' onClick={handleSubmit} disabled={saving || uploading}>{saving ? 'Kaydediliyor…' : isEdit ? 'Kaydet' : 'Ürünü Ekle'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

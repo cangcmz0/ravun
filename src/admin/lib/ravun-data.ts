@@ -1,10 +1,7 @@
-// ── RAVUN PAYLAŞILAN VERİ/GÜVENLİK KATMANI ──
-// Bu dosya, sitenin (src/main.jsx) PIN doğrulama, oturum yönetimi ve
-// ürün/sipariş/yorum/ayar veri mantığının admin paneli için TypeScript'e
-// taşınmış halidir. Site tarafındaki mantık BİREBİR aynı kalır; burası
-// admin panelinin kendi (React 19 / TanStack Router) bundle'ından
-// erişebilmesi için ayrı tutulmuştur. İkisi de aynı localStorage
-// anahtarlarını okuyup yazdığı için veriler senkron kalır.
+// ── RAVUN PAYLAŞILAN VERİ KATMANI ──
+// Ürün/sipariş/yorum/ayar verisinin normalize kuralları ve sabitleri.
+// Sitedeki (src/main.jsx) kurallarla aynıdır. Verinin kendisi artık sunucudaki
+// veritabanında durur; okuma/yazma için bkz. ./api.ts.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import PRODUCT_SEED from '../../data/products.json'
@@ -12,96 +9,6 @@ import PRODUCT_SEED from '../../data/products.json'
 const A = '/assets/'
 const ENV: any = (import.meta as any).env || {}
 export const SITE_URL = ENV.VITE_SITE_URL || 'https://ravun-tau.vercel.app'
-
-// ── GÜVENLİK / PIN GİRİŞİ ──
-export const ADMIN_PIN_SHA256: string = ENV.VITE_ADMIN_PIN_HASH || ''
-const ADMIN_PIN_SALT = 'ravun-local-admin-v2'
-const ADMIN_SESSION_KEY = 'ravun:adm_s'
-const ADMIN_LOCK_KEY = 'ravun:adm_l'
-const ADMIN_ATTEMPT_KEY = 'ravun:adm_a'
-const ADMIN_TOKEN_KEY = 'ravun:adm_t'
-export const MAX_LOGIN_ATTEMPTS = 5
-export const LOCK_DURATION_MS = 60000
-const SESSION_TIMEOUT_MS = 2 * 60 * 60 * 1000
-
-async function sha256Hex(value: string) {
-  const bytes = new TextEncoder().encode(value)
-  const hash = await crypto.subtle.digest('SHA-256', bytes)
-  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-function timingSafeEqual(a: string, b: string) {
-  const aa = String(a || ''); const bb = String(b || '')
-  let out = aa.length ^ bb.length
-  const len = Math.max(aa.length, bb.length)
-  for (let i = 0; i < len; i++) out |= (aa.charCodeAt(i) || 0) ^ (bb.charCodeAt(i) || 0)
-  return out === 0
-}
-export async function verifyAdminPin(inputPin: string) {
-  try {
-    if (!ADMIN_PIN_SHA256) return false
-    const normalized = String(inputPin || '').trim().slice(0, 32)
-    if (!normalized) return false
-    const digest = await sha256Hex(`${ADMIN_PIN_SALT}:${normalized}`)
-    return timingSafeEqual(digest, ADMIN_PIN_SHA256)
-  } catch { return false }
-}
-function generateSessionToken() {
-  const arr = new Uint8Array(32)
-  crypto.getRandomValues(arr)
-  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-function getBrowserFingerprint() {
-  return btoa([
-    navigator.userAgent,
-    screen.width + 'x' + screen.height,
-    Intl.DateTimeFormat().resolvedOptions().timeZone,
-  ].join('|')).slice(0, 24)
-}
-export function isValidAdminSession() {
-  try {
-    const raw = sessionStorage.getItem(ADMIN_SESSION_KEY)
-    if (!raw) return false
-    const session = JSON.parse(atob(raw))
-    if (!session.token || !session.exp || !session.fingerprint) return false
-    if (Date.now() > session.exp) { clearAdminSession(); return false }
-    const storedToken = sessionStorage.getItem(ADMIN_TOKEN_KEY)
-    if (!storedToken || storedToken !== session.token) return false
-    if (session.fingerprint !== getBrowserFingerprint()) return false
-    return true
-  } catch { return false }
-}
-export function createAdminSession() {
-  const token = generateSessionToken()
-  const session = { token, exp: Date.now() + SESSION_TIMEOUT_MS, fingerprint: getBrowserFingerprint(), created: Date.now() }
-  sessionStorage.setItem(ADMIN_SESSION_KEY, btoa(JSON.stringify(session)))
-  sessionStorage.setItem(ADMIN_TOKEN_KEY, token)
-  return token
-}
-export function clearAdminSession() {
-  sessionStorage.removeItem(ADMIN_SESSION_KEY)
-  sessionStorage.removeItem(ADMIN_TOKEN_KEY)
-  sessionStorage.removeItem(ADMIN_LOCK_KEY)
-  sessionStorage.removeItem(ADMIN_ATTEMPT_KEY)
-}
-export function getLoginAttempts() {
-  try { return Number(sessionStorage.getItem(ADMIN_ATTEMPT_KEY) || 0) } catch { return 0 }
-}
-export function getLockedUntil() {
-  try { return Number(sessionStorage.getItem(ADMIN_LOCK_KEY) || 0) } catch { return 0 }
-}
-export function registerFailedAttempt() {
-  const next = getLoginAttempts() + 1
-  try { sessionStorage.setItem(ADMIN_ATTEMPT_KEY, String(next)) } catch { /* noop */ }
-  if (next >= MAX_LOGIN_ATTEMPTS) {
-    const until = Date.now() + LOCK_DURATION_MS
-    try { sessionStorage.setItem(ADMIN_LOCK_KEY, String(until)) } catch { /* noop */ }
-    return { attempts: next, lockedUntil: until }
-  }
-  return { attempts: next, lockedUntil: 0 }
-}
-export function clearLoginAttempts() {
-  try { sessionStorage.removeItem(ADMIN_LOCK_KEY); sessionStorage.removeItem(ADMIN_ATTEMPT_KEY) } catch { /* noop */ }
-}
 
 // ── GÜVENLİ DEPOLAMA (site ile aynı anahtarlar / kodlama) ──
 function b64EncodeUtf8(str: string) {
@@ -122,21 +29,6 @@ export function readStored<T>(key: string, fallback: T): T {
     return parsed
   } catch { return fallback }
 }
-export function writeStored(key: string, value: any) {
-  try {
-    const encoded = b64EncodeUtf8(JSON.stringify(value))
-    if (encoded.length > 7_000_000) return false
-    localStorage.setItem(_sk(key), encoded)
-    return true
-  } catch { return false }
-}
-export const STORAGE_BUDGET_BYTES = 7_000_000
-/** writeStored ile birebir aynı kodlamayı kullanarak bir değerin kapladığı
- *  yeri tahmin eder — panelde "depolama kullanımı" göstergesi için. */
-export function estimateStoredSize(value: any): number {
-  try { return b64EncodeUtf8(JSON.stringify(value)).length } catch { return 0 }
-}
-
 // ── TEMİZLEME / GÜVENLİ DEĞER YARDIMCILARI ──
 const SECURITY_LIMITS = { text: 220, longText: 1400, url: 1200, image: 4_800_000, list: 40 }
 export function cleanText(value: any, max = SECURITY_LIMITS.text) {
@@ -159,7 +51,7 @@ export function safeUrl(value: any, fallback = '#') {
 export function safeImageSrc(value: any, fallback = `${A}products_hero-1.webp`) {
   const raw = cleanText(value, SECURITY_LIMITS.image)
   if (!raw) return fallback
-  if (raw.startsWith('/assets/') || raw.startsWith(A)) return raw
+  if (raw.startsWith('/assets/') || raw.startsWith(A) || raw.startsWith('/api/images/')) return raw
   if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(raw) && raw.length <= SECURITY_LIMITS.image) return raw
   if (/^blob:/i.test(raw)) return raw
   try { const u = new URL(raw, SITE_URL); return ['https:', 'http:'].includes(u.protocol) ? u.toString() : fallback } catch { return fallback }
@@ -299,22 +191,6 @@ export function normalizeProducts(value: any): any[] {
       detailPoints: normalizeDetailPoints(product?.detailPoints, fallback.detailPoints || []),
     }
   })
-}
-export function repairProducts(products: any) {
-  const current = normalizeProducts(products)
-  const byId = new Map(current.map((p) => [Number(p.id), p]))
-  INITIAL_PRODUCTS.forEach((base) => {
-    const existing = byId.get(base.id)
-    if (!existing) byId.set(base.id, { ...base })
-    else byId.set(base.id, {
-      ...existing,
-      category: categoryLabelFromKey(categoryKey(existing.category || base.category), existing.category || base.category),
-      visible: existing.visible !== false,
-      image: existing.image || base.image,
-      gallery: Array.isArray(existing.gallery) && existing.gallery.length ? existing.gallery : base.gallery,
-    })
-  })
-  return [...byId.values()].sort((a, b) => Number(a.id) - Number(b.id))
 }
 export function money(n: any) { return new Intl.NumberFormat('tr-TR').format(Number(n) || 0) + ' TL' }
 
@@ -484,6 +360,7 @@ export function normalizeReviews(value: any): Record<string, any[]> {
 export const ORDER_STATUSES: [string, string][] = [
   ['pending', 'Beklemede'], ['approved', 'Onaylandı'], ['production', 'Üretimde'],
   ['packing', 'Paketleniyor'], ['cargo', 'Kargoda'], ['delivered', 'Teslim edildi'],
+  ['cancelled', 'İptal edildi'],
 ]
 export function orderStatusLabel(status: string) { return ORDER_STATUSES.find(([k]) => k === status)?.[1] || 'Beklemede' }
 export function orderTotal(order: any) { return (order.items || []).reduce((s: number, x: any) => s + (Number(x.price) || 0) * (Number(x.qty) || 1), 0) }
@@ -568,12 +445,32 @@ export function normalizeSiteSettings(value: any): typeof DEFAULT_SITE_SETTINGS 
   }
 }
 
-// ── YÜKSEK SEVİYE VERİ ERİŞİMİ (site ile aynı localStorage anahtarları) ──
-export function loadProducts() { return repairProducts(readStored('ravun:products', INITIAL_PRODUCTS)) }
-export function saveProducts(products: any[]) { return writeStored('ravun:products', products) }
-export function loadReviews() { return normalizeReviews(readStored('ravun:reviews', INITIAL_REVIEWS)) }
-export function saveReviews(reviews: Record<string, any[]>) { writeStored('ravun:reviews', reviews) }
-export function loadOrders() { return normalizeOrders(readStored('ravun:orders', [])) }
-export function saveOrders(orders: any[]) { writeStored('ravun:orders', orders) }
-export function loadSiteSettings() { return normalizeSiteSettings(readStored('ravun:siteSettings', DEFAULT_SITE_SETTINGS)) }
-export function saveSiteSettings(settings: any) { writeStored('ravun:siteSettings', settings) }
+// ── ESKİ TARAYICI VERİSİ ──
+// Sunucuya geçmeden önce panel verileri tarayıcının localStorage'ında
+// tutuluyordu. Bu fonksiyonlar yalnızca o veriyi bir kez sunucuya aktarmak
+// için okur (bkz. Panel sayfasındaki "Eski verileri aktar" kartı).
+const LEGACY_KEYS = ['ravun:products', 'ravun:reviews', 'ravun:orders', 'ravun:siteSettings']
+export function readLegacyData() {
+  const products = readStored<any>('ravun:products', null)
+  const reviews = readStored<any>('ravun:reviews', null)
+  const orders = readStored<any>('ravun:orders', null)
+  const settings = readStored<any>('ravun:siteSettings', null)
+  const has = Boolean(
+    (Array.isArray(products) && products.length) ||
+    (Array.isArray(orders) && orders.length) ||
+    (reviews && typeof reviews === 'object') ||
+    (settings && typeof settings === 'object'),
+  )
+  return {
+    has,
+    products: Array.isArray(products) ? normalizeProducts(products) : undefined,
+    reviews: reviews && typeof reviews === 'object' ? normalizeReviews(reviews) : undefined,
+    orders: Array.isArray(orders) ? normalizeOrders(orders) : undefined,
+    settings: settings && typeof settings === 'object' ? normalizeSiteSettings(settings) : undefined,
+  }
+}
+export function clearLegacyData() {
+  for (const k of LEGACY_KEYS) {
+    try { localStorage.removeItem(_sk(k)) } catch { /* noop */ }
+  }
+}

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { PackageSearch } from 'lucide-react'
-import { loadOrders, money, orderStatusLabel, orderTotal } from '@/lib/ravun-data'
+import { money, orderStatusLabel, orderTotal } from '@/lib/ravun-data'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -11,12 +11,7 @@ function initials(name: string) {
   return parts.slice(0, 2).map((p) => p[0]?.toLocaleUpperCase('tr-TR')).join('')
 }
 
-export function RecentSales() {
-  const [orders, setOrders] = useState<any[]>([])
-
-  useEffect(() => {
-    setOrders(loadOrders())
-  }, [])
+export function RecentSales({ orders }: { orders: any[] }) {
 
   const recent = useMemo(
     () =>

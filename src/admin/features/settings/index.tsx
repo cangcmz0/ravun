@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Save } from 'lucide-react'
-import { categoryLabelFromKey, loadSiteSettings, saveSiteSettings } from '@/lib/ravun-data'
+import { categoryLabelFromKey } from '@/lib/ravun-data'
+import { errorMessage, fetchSettings, saveSettings } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -46,7 +47,15 @@ const RESERVED_VISIBILITY_SWITCHES = [
 ] as const
 
 export function Settings() {
-  const [form, setForm] = useState<any>(() => loadSiteSettings())
+  const [form, setForm] = useState<any>(null)
+  const [loadError, setLoadError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    fetchSettings()
+      .then(setForm)
+      .catch((err) => setLoadError(errorMessage(err, 'Ayarlar yüklenemedi.')))
+  }, [])
 
   const set = (key: string) => (value: any) => setForm((f: any) => ({ ...f, [key]: value }))
   const setCat = (key: string, field: string) => (value: any) =>
@@ -58,9 +67,17 @@ export function Settings() {
       },
     }))
 
-  const handleSave = () => {
-    saveSiteSettings(form)
-    toast.success('Site ayarları kaydedildi')
+  const handleSave = async () => {
+    if (!form || saving) return
+    setSaving(true)
+    try {
+      setForm(await saveSettings(form))
+      toast.success('Site ayarları kaydedildi · sitede yaklaşık 30 sn içinde görünür')
+    } catch (err) {
+      toast.error(`Kaydedilemedi: ${errorMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -81,10 +98,16 @@ export function Settings() {
               Ana sayfa metinleri, kategori kartları ve görünürlük ayarlarını buradan yönetin.
             </p>
           </div>
-          <Button onClick={handleSave}>
-            <Save className='size-4' /> Kaydet
+          <Button onClick={handleSave} disabled={!form || saving}>
+            <Save className='size-4' /> {saving ? 'Kaydediliyor…' : 'Kaydet'}
           </Button>
         </div>
+
+        {!form ? (
+          <p className={`py-10 text-center text-sm ${loadError ? 'text-destructive' : 'text-muted-foreground'}`}>
+            {loadError || 'Yükleniyor…'}
+          </p>
+        ) : (
 
         <Tabs defaultValue='hero'>
           <TabsList className='w-full flex-wrap justify-start'>
@@ -370,6 +393,7 @@ export function Settings() {
             </Card>
           </TabsContent>
         </Tabs>
+        )}
       </Main>
     </>
   )

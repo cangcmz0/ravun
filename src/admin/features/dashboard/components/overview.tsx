@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from 'recharts'
-import { loadOrders, orderTotal } from '@/lib/ravun-data'
+import { orderTotal } from '@/lib/ravun-data'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -8,12 +8,7 @@ function monthLabel(monthIndex: number) {
   return new Date(2000, monthIndex, 1).toLocaleDateString('tr-TR', { month: 'short' })
 }
 
-export function Overview() {
-  const [orders, setOrders] = useState<any[]>([])
-
-  useEffect(() => {
-    setOrders(loadOrders())
-  }, [])
+export function Overview({ orders }: { orders: any[] }) {
 
   const data = useMemo(() => {
     const year = new Date().getFullYear()

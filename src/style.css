@@ -11530,3 +11530,24 @@ body.modal-open{
     grid-template-columns:1fr;
   }
 }
+
+/* ── Sunucu bağlantısı: hata ve yükleniyor durumları ── */
+.reviewError,
+.orderError{
+  margin:8px 0 0;
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(185,28,28,.08);
+  border:1px solid rgba(185,28,28,.22);
+  color:#8f1d1d;
+  font-size:13px;
+  line-height:1.45;
+}
+.pageLoading{
+  min-height:50vh;
+  display:grid;
+  place-items:center;
+  color:var(--text-muted, #7a6f5f);
+  font-size:15px;
+  letter-spacing:.04em;
+}

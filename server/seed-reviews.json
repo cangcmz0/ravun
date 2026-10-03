@@ -1,0 +1,77 @@
+{
+  "1": [
+    {
+      "name": "Selin K.",
+      "rating": 5,
+      "date": "Mart 2025",
+      "text": "Rafın fotoğrafları güzeldi ama elinize aldığınızda gerçek kalitesini anlıyorsunuz.",
+      "helpful": 8
+    },
+    {
+      "name": "Emre T.",
+      "rating": 5,
+      "date": "Şubat 2025",
+      "text": "Salonumun en dikkat çekici noktası oldu.",
+      "helpful": 5
+    }
+  ],
+  "2": [
+    {
+      "name": "Burak M.",
+      "rating": 5,
+      "date": "Nisan 2025",
+      "text": "Mutfak tezgahımın üzerinde hem fonksiyonel hem sanat eseri.",
+      "helpful": 11
+    }
+  ],
+  "3": [
+    {
+      "name": "Can Ö.",
+      "rating": 5,
+      "date": "Mayıs 2025",
+      "text": "Masama ayrı bir karakter kattı. Küçük boyutuna rağmen çok sağlam.",
+      "helpful": 9
+    },
+    {
+      "name": "Merve S.",
+      "rating": 5,
+      "date": "Nisan 2025",
+      "text": "Fiyatına kesinlikle değer. El yapımı olduğu her açıdan belli.",
+      "helpful": 6
+    }
+  ],
+  "4": [
+    {
+      "name": "Nilüfer B.",
+      "rating": 5,
+      "date": "Haziran 2025",
+      "text": "Peynir ve meze tabağı olarak kullanıyorum. Hem şık hem dayanıklı.",
+      "helpful": 14
+    }
+  ],
+  "5": [
+    {
+      "name": "Leyla Ç.",
+      "rating": 5,
+      "date": "Temmuz 2025",
+      "text": "Ofis masam tamamen değişti. 3'lü set birbirine çok uyumlu.",
+      "helpful": 7
+    }
+  ],
+  "6": [
+    {
+      "name": "Pınar E.",
+      "rating": 5,
+      "date": "Ağustos 2025",
+      "text": "Butik markam için etiket seti aldım, müşterilerden çok güzel dönüşler aldım.",
+      "helpful": 18
+    },
+    {
+      "name": "Serkan T.",
+      "rating": 5,
+      "date": "Temmuz 2025",
+      "text": "Detay kalitesi inanılmaz. Baskı net, materyaller çok kaliteli.",
+      "helpful": 9
+    }
+  ]
+}

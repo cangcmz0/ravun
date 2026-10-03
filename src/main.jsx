@@ -275,7 +275,7 @@ function safeUrl(value, fallback = '#') {
 function safeImageSrc(value, fallback = `${A}products_hero-1.webp`) {
   const raw = cleanText(value, SECURITY_LIMITS.image);
   if (!raw) return fallback;
-  if (raw.startsWith('/assets/') || raw.startsWith(A)) return raw;
+  if (raw.startsWith('/assets/') || raw.startsWith(A) || raw.startsWith('/api/images/')) return raw;
   if (/^data:image\/(png|jpe?g|webp|gif|svg\+xml);base64,/i.test(raw) && raw.length <= SECURITY_LIMITS.image) return raw;
   if (/^blob:/i.test(raw)) return raw;
   try {
@@ -324,22 +324,6 @@ function sortProductsForStore(list) {
     return (Number(a?.id)||0) - (Number(b?.id)||0);
   });
 }
-function repairProducts(products) {
-  const current = normalizeProducts(products);
-  const byId = new Map(current.map(p => [Number(p.id), p]));
-  INITIAL_PRODUCTS.forEach(base => {
-    const existing = byId.get(base.id);
-    if (!existing) byId.set(base.id, {...base});
-    else byId.set(base.id, {
-      ...existing,
-      category: categoryLabelFromKey(categoryKey(existing.category || base.category), existing.category || base.category),
-      visible: existing.visible !== false,
-      image: existing.image || base.image,
-      gallery: Array.isArray(existing.gallery) && existing.gallery.length ? existing.gallery : base.gallery
-    });
-  });
-  return [...byId.values()].sort((a,b)=>Number(a.id)-Number(b.id));
-}
 function avgRating(reviews) {
   const a = (reviews||[]).filter(r=>r.approved);
   return a.length ? a.reduce((s,r)=>s+r.rating,0)/a.length : 0;
@@ -366,11 +350,36 @@ function _sk(key) {
    input'un scroll/odak davranışında sıçramaya yol açan asıl kaynak buydu. Bu hook,
    yazmayı kullanıcı bir süre durana kadar erteler (debounce) ki her tuş vuruşu değil,
    sadece yazma bittiğinde bir kez ağır encode/localStorage işlemi çalışsın. */
-function useAutosave(key, value, delay = 500) {
+function useAutosave(key, value, delay = 500, enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     const t = setTimeout(() => writeStored(key, value), delay);
     return () => clearTimeout(t);
-  }, [key, value, delay]);
+  }, [key, value, delay, enabled]);
+}
+/* ── SUNUCU (API) ──
+   Ürünler, yorumlar ve site ayarları sunucudaki veritabanından gelir; panelde
+   yapılan değişiklikler tüm ziyaretçilere yansır. Son başarılı katalog,
+   sonraki açılışta anında görünsün diye tarayıcıda önbelleğe alınır. Sunucuya
+   ulaşılamazsa önbellek ya da yerleşik ürün listesiyle çalışmaya devam edilir. */
+const CATALOG_CACHE_KEY = 'ravun:catalogCache';
+function catalogFromPayload(data) {
+  return {
+    products: Array.isArray(data?.products) ? (data.products.length ? normalizeProducts(data.products) : []) : normalizeProducts(INITIAL_PRODUCTS),
+    reviews: normalizeReviews(data?.reviews && typeof data.reviews === 'object' ? data.reviews : INITIAL_REVIEWS),
+    settings: normalizeSiteSettings(data?.settings || {})
+  };
+}
+async function apiPost(path, body) {
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  } catch {
+    throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || 'İşlem tamamlanamadı.');
+  return data;
 }
 function readStored(key, fallback) {
   try {
@@ -426,7 +435,7 @@ function normalizeSiteSettings(value) {
     desc: cleanText(cat?.desc || DEFAULT_CATEGORY_SETTINGS[categoryKey(key)]?.desc || '', 280),
     image: safeImageSrc(cat?.image, DEFAULT_CATEGORY_SETTINGS[categoryKey(key)]?.image || `${A}products_hero-1.webp`)
   }]));
-  const staleVisualPreset = incoming.styleVersion !== DEFAULT_SITE_SETTINGS.styleVersion;
+  const staleVisualPreset = false;
   return {
     ...DEFAULT_SITE_SETTINGS,
     ...incoming,
@@ -1015,10 +1024,12 @@ function ReviewSection({productId, allReviews, setAllReviews}){
   const reviews=useMemo(()=>reviewList(allReviews, productId),[allReviews,productId]);
   const avg=useMemo(()=>reviews.length?reviews.reduce((s,r)=>s+r.rating,0)/reviews.length:0,[reviews]);
   const dist=useMemo(()=>{const d={5:0,4:0,3:0,2:0,1:0};reviews.forEach(r=>{d[r.rating]=(d[r.rating]||0)+1;});return d;},[reviews]);
-  const submitReview=()=>{
+  const [sending,setSending]=useState(false);
+  const [error,setError]=useState('');
+  const submitReview=async()=>{
     const cleanName = (form.name||'').trim().slice(0, 60).replace(/[<>]/g,'');
     const cleanText = (form.text||'').trim().slice(0, 1200).replace(/[<>]/g,'');
-    if(!cleanName || !cleanText) return;
+    if(!cleanName || !cleanText || sending) return;
     // Spam önlemi: aynı IP'den çok fazla yorum engeli (basit client-side)
     const recentKey = 'rv_review_ts';
     try {
@@ -1027,24 +1038,22 @@ function ReviewSection({productId, allReviews, setAllReviews}){
       sessionStorage.setItem(recentKey, String(Date.now()));
     } catch {}
     const rating = Math.min(5, Math.max(1, Number(form.rating)||5));
-    const nr={
-      id: Date.now(),
-      name: cleanName,
-      avatar: cleanName[0].toLocaleUpperCase('tr-TR'),
-      rating,
-      date: 'Şimdi',
-      text: cleanText,
-      helpful: 0,
-      approved: true
-    };
-    setAllReviews(prev=>({...prev,[productId]:[nr,...(prev[productId]||[])]}));
-    setForm({name:'',text:'',rating:5}); setSent(true);
-    setTimeout(()=>{setSent(false);setTab('list');},2500);
+    setSending(true); setError('');
+    try {
+      await apiPost('/reviews', {productId, name:cleanName, text:cleanText, rating});
+      setForm({name:'',text:'',rating:5}); setSent(true);
+      setTimeout(()=>{setSent(false);setTab('list');},4000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
   };
   const markHelpful=id=>{
     if(helpfulMap[id])return;
     setAllReviews(prev=>({...prev,[productId]:(prev[productId]||[]).map(r=>r.id===id?{...r,helpful:r.helpful+1}:r)}));
     setHelpfulMap(m=>({...m,[id]:true}));
+    apiPost(`/reviews/${id}/helpful`, {}).catch(()=>{});
   };
   return (
     <div className="reviewSection">
@@ -1088,12 +1097,13 @@ function ReviewSection({productId, allReviews, setAllReviews}){
       )}
       {tab==='write'&&(
         <div className="writeReviewArea">
-          {sent?<div className="reviewSentMsg"><ICheck/> Yorumunuz eklendi, teşekkürler!</div>:(
+          {sent?<div className="reviewSentMsg"><ICheck/> Teşekkürler! Yorumunuz alındı, onaylandıktan sonra yayınlanacak.</div>:(
             <>
               <div className="writeReviewField"><label>Puanınız</label><StarRating rating={form.rating} size="md" interactive onSet={n=>setForm(f=>({...f,rating:n}))}/></div>
               <div className="writeReviewField"><label>Adınız</label><input className="reviewInput" placeholder="Ad Soyad" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
               <div className="writeReviewField"><label>Yorumunuz</label><textarea className="reviewTextarea" placeholder="Ürün hakkındaki deneyiminizi paylaşın…" rows={4} value={form.text} onChange={e=>setForm(f=>({...f,text:e.target.value}))}/></div>
-              <button className="reviewSubmit" onClick={submitReview} disabled={!form.name||!form.text}>Yorum Gönder ↗</button>
+              {error&&<p className="reviewError" role="alert">{error}</p>}
+              <button className="reviewSubmit" onClick={submitReview} disabled={!form.name||!form.text||sending}>{sending?'Gönderiliyor…':'Yorum Gönder ↗'}</button>
             </>
           )}
         </div>
@@ -1840,8 +1850,10 @@ function Contact(){
       mesaj: cleanText(form.mesaj, 1200),
       waStatus: 'pending', // 'sent' | 'pending' | 'failed'
     };
-    const saved = saveContactMsg(entry);
+    saveContactMsg(entry);
     setSavedMsgs(readContactMsgs());
+    // Atölyeye ulaşması için sunucuya da kaydet (WhatsApp açılmasa bile panelde görünür).
+    apiPost('/messages', {isim:entry.isim, eposta:entry.eposta, telefon:entry.telefon, parca:entry.parca, mesaj:entry.mesaj}).catch(err=>console.warn('[Ravun] mesaj sunucuya kaydedilemedi:', err.message));
     // 2. WhatsApp'ı aç
     const text = `Merhaba, Ravun formu üzerinden ulaşıyorum.\n\nİsim: ${entry.isim}\nE-posta: ${entry.eposta}\nTelefon: ${entry.telefon||'—'}\nİlgilendiğim ürün: ${entry.parca||'—'}\n\nMesaj: ${entry.mesaj||'—'}`;
     setTimeout(() => {
@@ -1969,6 +1981,8 @@ function Contact(){
 function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go}){
   const [customer,setCustomer]=useState({name:'',phone:'',note:''});
   const [created,setCreated]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [orderError,setOrderError]=useState('');
   const total=useMemo(()=>cart.reduce((s,x)=>s+x.price*x.qty,0),[cart]);
   const giftCount=cart.filter(x=>x.giftWrap).length;
   const itemCount=cart.reduce((s,x)=>s+Number(x.qty||0),0);
@@ -1988,24 +2002,42 @@ function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go})
       // önceden sepet hiç temizlenmiyordu, tamamlanan sipariş kalemleri sepette kalıyordu.
       if(created) clearCart?.();
       setCreated(null);
+      setOrderError('');
       setCustomer({name:'',phone:'',note:''});
     }
   },[open]);
+  const placeOrder=async()=>{
+    setBusy(true); setOrderError('');
+    try {
+      const order=await createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
+      setCreated(order);
+      return order;
+    } catch (err) {
+      setOrderError(err.message);
+      return null;
+    } finally {
+      setBusy(false);
+    }
+  };
   const submitOrder=()=>{
-    if(cart.length===0)return;
-    const order=createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
-    setCreated(order);
+    if(cart.length===0||busy||created)return;
+    placeOrder();
   };
   /* Önceden link href'i render anında hesaplanıyordu; taslak tıklama anında
      oluşturulduğu için WhatsApp mesajına sipariş numarası hiç girmiyordu.
      Artık önce sipariş oluşturulup mesaj numarayla birlikte açılıyor. */
-  const ensureOrderForWa=e=>{
+  const ensureOrderForWa=async e=>{
     if(cart.length===0||created)return;
     e.preventDefault();
-    const order=createOrder({customerName:customer.name,customerPhone:customer.phone,note:customer.note});
-    setCreated(order);
+    if(busy)return;
+    // Sekme tıklama anında açılır (açılır pencere engelleyicisine takılmasın),
+    // sipariş kaydı oluşunca numarayla birlikte WhatsApp'a yönlendirilir.
+    const win=window.open('about:blank','_blank');
+    const order=await placeOrder();
     const msg=buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created:order});
-    safeOpen(`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`);
+    const url=`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(msg)}`;
+    if(win){ try{ win.opener=null; }catch{} win.location.href=url; }
+    else window.location.href=url;
   };
   const addNoteChip=(text)=>setCustomer(c=>({
     ...c,
@@ -2036,16 +2068,17 @@ function CartDrawer({open, cart, setOpen, inc, dec, createOrder, clearCart, go})
         <div className="drawerTotal"><span>Toplam</span><strong>{money(total)}</strong></div>
         {cart.length>0&&(
           <div className="drawerOrderBox">
-            <div><b>Sipariş taslağı</b><small>VPS/veritabanı gelene kadar admin panelinde yerel kayıt olarak tutulur.</small></div>
+            <div><b>Sipariş bilgileri</b><small>Siparişiniz atölyeye iletilir; ödeme ve teslim detayları WhatsApp üzerinden netleşir.</small></div>
             <input value={customer.name} onChange={e=>setCustomer(c=>({...c,name:e.target.value}))} placeholder="Ad Soyad"/>
             <input value={customer.phone} onChange={e=>setCustomer(c=>({...c,phone:e.target.value}))} placeholder="Telefon"/>
             <div className="noteChips" aria-label="Hızlı sipariş notları">
               {['Hediye paketi olsun','Ölçü konuşalım','Teslim tarihi önemli'].map(chip=><button key={chip} type="button" onClick={()=>addNoteChip(chip)}>{chip}</button>)}
             </div>
             <textarea value={customer.note} onChange={e=>setCustomer(c=>({...c,note:e.target.value}))} placeholder="Ölçü, renk, özel istek notu" rows="2"/>
-            <button className="draftOrderBtn" onClick={submitOrder} disabled={!!created}>{created?'✓ Taslak Oluşturuldu':'Sipariş Taslağı Oluştur'}</button>
-            <small className="checkoutHint">Taslak oluşturunca admin panelindeki sipariş listesine düşer. WhatsApp mesajı da aynı bilgileri taşır.</small>
-            {created&&<p className="orderCreated">✓ {created.orderNo} oluşturuldu. Admin panelinden takip edebilirsin.</p>}
+            <button className="draftOrderBtn" onClick={submitOrder} disabled={!!created||busy}>{created?'✓ Sipariş Alındı':busy?'Gönderiliyor…':'Siparişi Gönder'}</button>
+            <small className="checkoutHint">Siparişiniz kaydedilir ve atölyeye ulaşır. Dilerseniz aşağıdan WhatsApp ile de yazabilirsiniz; mesaj sipariş numaranızı taşır.</small>
+            {created&&<p className="orderCreated">✓ Siparişiniz alındı. Sipariş no: <b>{created.orderNo}</b></p>}
+            {orderError&&<p className="orderError" role="alert">{orderError} WhatsApp ile sipariş vermeye devam edebilirsiniz.</p>}
           </div>
         )}
         <a className="waOrder" href={`https://wa.me/${WA_NUMBER}?text=${waMsg}`} target="_blank" rel="noreferrer" onClick={ensureOrderForWa}>WhatsApp ile Sipariş Ver</a>
@@ -2440,8 +2473,8 @@ function parseInitialRoute(products){
   if(productMatch){
     const id = Number(productMatch[1]);
     const product = products.find(p=>p.id===id);
-    if(product) return {page:'product', product};
-    return {page:'collection', product:null};
+    // Ürün henüz yüklenmemiş katalogda olabilir — katalog gelince çözülür.
+    return {page:'product', product:product||null, productId:Number.isFinite(id)?id:null};
   }
   const slug = path.replace(/^\//,'');
   const page = SLUG_TO_PAGE[slug];
@@ -2457,7 +2490,7 @@ class ErrorBoundary extends React.Component{
       const clearSiteCache = () => {
         try {
           // Hem eski düz anahtarları hem şifreli anahtarları temizle
-          ['ravun:products','ravun:reviews','ravun:favorites','ravun:cart','ravun:orders','ravun:recent','ravun:siteSettings'].forEach(k => {
+          ['ravun:products','ravun:reviews','ravun:favorites','ravun:cart','ravun:orders','ravun:recent','ravun:siteSettings',CATALOG_CACHE_KEY].forEach(k => {
             localStorage.removeItem(k);
             try{ localStorage.removeItem(btoa('rv:'+k).replace(/=/g,'')); }catch{}
           });
@@ -2472,16 +2505,38 @@ class ErrorBoundary extends React.Component{
 }
 /* ── APP ── */
 function App(){
-  const [products,setProducts]=useState(()=>repairProducts(readStored('ravun:products', INITIAL_PRODUCTS)));
+  const [initialCatalog]=useState(()=>catalogFromPayload(readStored(CATALOG_CACHE_KEY, null)));
+  const [products,setProducts]=useState(initialCatalog.products);
   const initialRoute = useMemo(()=>parseInitialRoute(products),[]);
-  const [allReviews,setAllReviews]=useState(()=>normalizeReviews(readStored('ravun:reviews', INITIAL_REVIEWS)));
+  const [allReviews,setAllReviews]=useState(initialCatalog.reviews);
   const [favorites,setFavorites]=useState(()=>normalizeFavorites(readStored('ravun:favorites', []), products));
   const [page,setPage]=useState(initialRoute.page);
   const [currentProduct,setCurrentProduct]=useState(initialRoute.product);
-  const [siteSettings,setSiteSettings]=useState(()=>normalizeSiteSettings(readStored('ravun:siteSettings', DEFAULT_SITE_SETTINGS)));
+  const [pendingProductId,setPendingProductId]=useState(initialRoute.page==='product'&&!initialRoute.product?initialRoute.productId:null);
+  const [siteSettings,setSiteSettings]=useState(initialCatalog.settings);
   const [cart,setCart]=useState(()=>normalizeCart(readStored('ravun:cart', []), products, siteSettings.giftPrice));
-  const [orders,setOrders]=useState(()=>normalizeOrders(readStored('ravun:orders', [])));
   const [recentIds,setRecentIds]=useState(()=>recentProductIds(readStored('ravun:recent', []), products));
+  const [catalogReady,setCatalogReady]=useState(false);
+  useEffect(()=>{
+    let alive=true;
+    fetch('/api/catalog',{headers:{Accept:'application/json'}})
+      .then(r=>r.ok?r.json():Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(data=>{
+        if(!alive)return;
+        const c=catalogFromPayload(data);
+        setProducts(c.products);
+        setAllReviews(c.reviews);
+        setSiteSettings(c.settings);
+        // Sepet/favoriler güncel katalogla yeniden eşleştirilir (fiyat, satış durumu).
+        setCart(normalizeCart(readStored('ravun:cart', []), c.products, c.settings.giftPrice));
+        setFavorites(normalizeFavorites(readStored('ravun:favorites', []), c.products));
+        setRecentIds(recentProductIds(readStored('ravun:recent', []), c.products));
+        writeStored(CATALOG_CACHE_KEY, data);
+      })
+      .catch(err=>console.warn('[Ravun] Katalog sunucudan alınamadı, kayıtlı veriyle devam ediliyor:', err?.message))
+      .finally(()=>{ if(alive) setCatalogReady(true); });
+    return()=>{alive=false;};
+  },[]);
   const [drawer,setDrawer]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
@@ -2528,7 +2583,7 @@ function App(){
   },[]);
   useEffect(()=>{
     const current = parseInitialRoute(products);
-    window.history.replaceState({page:current.page, productId:current.product?.id||null}, '', window.location.href);
+    window.history.replaceState({page:current.page, productId:current.product?.id||current.productId||null}, '', window.location.href);
     const onPop=e=>{
       const st=e.state || parseInitialRoute(products);
       const product=st.productId?products.find(p=>p.id===st.productId):st.product;
@@ -2538,14 +2593,23 @@ function App(){
     window.addEventListener('popstate',onPop);
     return()=>window.removeEventListener('popstate',onPop);
   },[go,products]);
-  useAutosave('ravun:products', products);
-  useAutosave('ravun:reviews', allReviews);
   useEffect(()=>{ if(currentProduct){ const fresh=products.find(p=>p.id===currentProduct.id); if(fresh && fresh!==currentProduct) setCurrentProduct(fresh); } },[products,currentProduct]);
-  useAutosave('ravun:favorites', favorites);
-  useAutosave('ravun:cart', cart);
-  useAutosave('ravun:orders', orders);
-  useAutosave('ravun:recent', recentIds);
-  useAutosave('ravun:siteSettings', siteSettings);
+  // /urun/:id ile gelinen ama önbellekte olmayan ürün: katalog gelince aç, yoksa koleksiyona dön.
+  useEffect(()=>{
+    if(pendingProductId==null)return;
+    const found=products.find(p=>p.id===pendingProductId);
+    if(found){ setCurrentProduct(found); setPendingProductId(null); return; }
+    if(catalogReady){
+      setPendingProductId(null);
+      window.history.replaceState({page:'collection', productId:null}, '', pagePath('collection'));
+      go('collection', null, false);
+    }
+  },[pendingProductId,products,catalogReady,go]);
+  // Sepet/favoriler katalog gelmeden yazılmaz: aksi halde henüz yüklenmemiş
+  // ürünler eşleşmeyip kayıttan silinebilirdi.
+  useAutosave('ravun:favorites', favorites, 500, catalogReady);
+  useAutosave('ravun:cart', cart, 500, catalogReady);
+  useAutosave('ravun:recent', recentIds, 500, catalogReady);
   useEffect(()=>updateMeta(page,currentProduct),[page,currentProduct]);
   useEffect(()=>{ if(page==='product'&&currentProduct){ setRecentIds(ids=>[currentProduct.id,...(ids||[]).filter(id=>id!==currentProduct.id)].slice(0,8)); } },[page,currentProduct?.id]);
   useEffect(()=>{const nav=e=>go(e.detail);window.addEventListener('ravun:navigate',nav);return()=>window.removeEventListener('ravun:navigate',nav);},[go]);
@@ -2607,13 +2671,16 @@ function App(){
   };
   const dec=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:x.qty-1}:x).filter(x=>x.qty>0));
   const incQty=id=>setCart(items=>items.map(x=>x.id===id?{...x,qty:Math.min(99,x.qty+1)}:x));
-  const createOrder=(customer={})=>{
-    // cart snapshot - stale closure önlemi için anlık değer alınır
-    const cartSnapshot=[...cart];
-    const order={id:Date.now(),orderNo:makeOrderNo(),status:'pending',items:cartSnapshot.map(({id,baseId,title,price,giftPrice,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})=>({id,baseId:baseId??id,title,price,giftPrice:giftPrice||0,qty,image,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery,selectedSize,selectedColor,certificateNo,status})),customerName:customer.customerName||'',customerPhone:customer.customerPhone||'',note:customer.note||'',cargoCode:'',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-    setOrders(os=>[order,...os]);
+  // Sipariş sunucuda oluşturulur; fiyatlar sunucuda güncel katalogdan hesaplanır.
+  const createOrder=async(customer={})=>{
+    const {order}=await apiPost('/orders', {
+      items:cart.map(({id,baseId,qty,selectedSize,selectedColor,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery})=>({id,baseId:baseId??id,qty,selectedSize,selectedColor,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery})),
+      customerName:customer.customerName||'',
+      customerPhone:customer.customerPhone||'',
+      note:customer.note||''
+    });
     if(toastTimer.current)clearTimeout(toastTimer.current);
-    setToast(`${order.orderNo} sipariş taslağı oluşturuldu`);
+    setToast(`${order.orderNo} siparişiniz alındı`);
     toastTimer.current=setTimeout(()=>setToast(''),2600);
     return order;
   };
@@ -2627,6 +2694,7 @@ function App(){
       {page==='story'&&<StoryPage go={go}/>}
       {page==='contact'&&<ContactPage/>}
       {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go}/>}
+      {page==='product'&&!currentProduct&&<main className="page productDetailPage"><p className="pageLoading">Ürün yükleniyor…</p></main>}
       {page==='product'&&currentProduct&&<ProductDetailPage product={currentProduct} go={go} add={add} allReviews={allReviews} setAllReviews={setAllReviews} favorites={favorites} toggleFav={toggleFav} products={products} recentIds={recentIds} settings={siteSettings}/>}
       <Footer go={go} settings={siteSettings} onAdmin={handleAdmin}/>
     </>
