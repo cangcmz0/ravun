@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Eye, PackageSearch, Search, Trash2 } from 'lucide-react'
+import { Eye, PackageSearch, Printer, Search, Trash2 } from 'lucide-react'
 import {
   ORDER_STATUSES,
   money,
   orderStatusLabel,
   orderTotal,
 } from '@/lib/ravun-data'
-import { deleteOrder, errorMessage, fetchOrders, updateOrder } from '@/lib/api'
+import { type NotifySettings, deleteOrder, errorMessage, fetchNotify, fetchOrders, updateOrder } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/table'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { OrderDetailDialog } from './components/order-detail-dialog'
+import { printOrder } from './order-tools'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -55,6 +56,7 @@ export function Orders() {
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
 
   const [loadError, setLoadError] = useState('')
+  const [msgConfig, setMsgConfig] = useState<NotifySettings | null>(null)
 
   const reload = () =>
     fetchOrders()
@@ -63,6 +65,8 @@ export function Orders() {
       .finally(() => setLoaded(true))
 
   useEffect(() => {
+    // Hazır WhatsApp mesajları için kargo/ödeme bilgileri (yoksa şablonlar yine çalışır).
+    fetchNotify().then(setMsgConfig).catch(() => {})
     reload()
     // Yeni siparişler panel açıkken de görünsün diye düzenli yenile.
     const t = setInterval(reload, 60_000)
@@ -110,6 +114,10 @@ export function Orders() {
     } catch (err) {
       toast.error(`Kaydedilemedi: ${errorMessage(err)}`)
     }
+  }
+
+  const handlePrint = (order: any) => {
+    if (!printOrder(order)) toast.error('Yazdırma penceresi açılamadı. Tarayıcının açılır pencere iznini kontrol edin.')
   }
 
   const handleDelete = async () => {
@@ -202,6 +210,7 @@ export function Orders() {
                 </Select>
                 <div className='flex items-center gap-1'>
                   <Button variant='outline' size='sm' onClick={() => setDetailTarget(o)}><Eye className='me-1 size-4' />Detay</Button>
+                  <Button variant='ghost' size='icon' onClick={() => handlePrint(o)} aria-label='Yazdır'><Printer className='size-4' /></Button>
                   <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(o)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
                 </div>
               </div>
@@ -271,6 +280,7 @@ export function Orders() {
                   <TableCell className='text-end'>
                     <div className='flex items-center justify-end gap-1'>
                       <Button variant='ghost' size='icon' onClick={() => setDetailTarget(o)} aria-label='Detay'><Eye className='size-4' /></Button>
+                      <Button variant='ghost' size='icon' onClick={() => handlePrint(o)} aria-label='Yazdır' title='Sipariş fişini yazdır'><Printer className='size-4' /></Button>
                       <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(o)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
                     </div>
                   </TableCell>
@@ -286,6 +296,7 @@ export function Orders() {
         onOpenChange={(o) => !o && setDetailTarget(null)}
         order={detailTarget}
         onSave={handleSaveDetail}
+        msgConfig={msgConfig}
       />
 
       <ConfirmDialog

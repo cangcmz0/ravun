@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  CATEGORIES,
+  DEFAULT_CATEGORIES,
   PRODUCT_STATUS,
   certificateNo as buildCertificateNo,
   compressImageFile,
@@ -57,11 +57,11 @@ function toColorRows(colors?: string[], names?: string[]): ColorRow[] {
   return c.map((hex, i) => ({ hex, name: n[i] || '' }))
 }
 
-function emptyForm(nextId: number, nextSortOrder: number) {
+function emptyForm(nextId: number, nextSortOrder: number, category = DEFAULT_CATEGORIES[0]) {
   return {
     id: nextId,
     title: '',
-    category: CATEGORIES[1],
+    category,
     tag: 'ATÖLYE',
     price: 0,
     status: '',
@@ -96,6 +96,8 @@ type ProductFormDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   product: any | null // null = yeni ürün
+  duplicateOf?: any | null // dolu ise: bu ürünün kopyası (yeni ürün olarak) açılır
+  categories?: string[]
   nextId: number
   nextSortOrder: number
   onSave: (product: any) => Promise<boolean>
@@ -105,15 +107,22 @@ type ProductFormDialogProps = {
 export function ProductFormDialog({
   open,
   onOpenChange,
-  product,
+  product: editProduct,
+  duplicateOf,
+  categories = DEFAULT_CATEGORIES,
   nextId,
   nextSortOrder,
   onSave,
 }: ProductFormDialogProps) {
-  const [form, setForm] = useState(() => emptyForm(nextId, nextSortOrder))
+  const [form, setForm] = useState(() => emptyForm(nextId, nextSortOrder, categories[0]))
   const [pendingUploads, setPendingUploads] = useState(0)
   const uploading = pendingUploads > 0
-  const isEdit = Boolean(product)
+  const isEdit = Boolean(editProduct)
+  const isDuplicate = !editProduct && Boolean(duplicateOf)
+  // Düzenlenen ya da kopyalanan ürün (form bunun bilgileriyle dolar)
+  const product = editProduct || duplicateOf || null
+  // Ürünün mevcut kategorisi listede yoksa (eski veri) seçenekler arasında yine görünsün.
+  const categoryOptions = form.category && !categories.includes(form.category) ? [...categories, form.category] : categories
 
   useEffect(() => {
     if (!open) return
@@ -121,7 +130,7 @@ export function ProductFormDialog({
       setForm({
         id: product.id,
         title: product.title || '',
-        category: product.category || CATEGORIES[1],
+        category: product.category || categories[0],
         tag: product.tag || 'ATÖLYE',
         price: Number(product.price) || 0,
         status: keyToStatusLabel(product.status),
@@ -150,12 +159,22 @@ export function ProductFormDialog({
         featured: Boolean(product.featured),
         giftEligible: product.giftEligible !== false,
         sortOrder: Number(product.sortOrder) || nextSortOrder,
+        // Kopya: yeni numara, gizli başlar, listede aslının hemen arkasına yerleşir.
+        ...(isDuplicate ? {
+          id: nextId,
+          title: `${product.title || 'Ürün'} (kopya)`,
+          certificateNo: '',
+          visible: false,
+          homeVisible: false,
+          featured: false,
+          sortOrder: (Number(product.sortOrder) || nextSortOrder) + 5,
+        } : {}),
       })
     } else {
-      setForm(emptyForm(nextId, nextSortOrder))
+      setForm(emptyForm(nextId, nextSortOrder, categories[0]))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, product])
+  }, [open, editProduct, duplicateOf])
 
   const set = <K extends string>(key: K) => (value: any) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -249,9 +268,13 @@ export function ProductFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='flex max-h-[90vh] flex-col sm:max-w-3xl'>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Ürünü Düzenle' : 'Yeni Ürün'}</DialogTitle>
+          <DialogTitle>{isEdit ? 'Ürünü Düzenle' : isDuplicate ? 'Ürünü Kopyala' : 'Yeni Ürün'}</DialogTitle>
           <DialogDescription>
-            {isEdit ? `${form.title || 'Ürün'} bilgilerini güncelle.` : 'Yeni bir atölye parçası ekle.'}
+            {isEdit
+              ? `${form.title || 'Ürün'} bilgilerini güncelle.`
+              : isDuplicate
+                ? 'Tüm bilgiler ve fotoğraflar kopyalandı. Değiştirmek istediklerinizi düzenleyip kaydedin; kopya gizli olarak eklenir.'
+                : 'Yeni bir atölye parçası ekle.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -278,7 +301,7 @@ export function ProductFormDialog({
                   <Select value={form.category} onValueChange={set('category')}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {CATEGORIES.slice(1).map((c) => (
+                      {categoryOptions.map((c) => (
                         <SelectItem key={c} value={c}>{c}</SelectItem>
                       ))}
                     </SelectContent>
@@ -455,7 +478,7 @@ export function ProductFormDialog({
 
         <DialogFooter>
           <Button type='button' variant='outline' onClick={() => onOpenChange(false)}>Vazgeç</Button>
-          <Button type='button' onClick={handleSubmit} disabled={saving || uploading}>{saving ? 'Kaydediliyor…' : isEdit ? 'Kaydet' : 'Ürünü Ekle'}</Button>
+          <Button type='button' onClick={handleSubmit} disabled={saving || uploading}>{saving ? 'Kaydediliyor…' : isEdit ? 'Kaydet' : isDuplicate ? 'Kopyayı kaydet' : 'Ürünü Ekle'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

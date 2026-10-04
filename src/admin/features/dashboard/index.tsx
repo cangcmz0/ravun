@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from '@tanstack/react-router'
-import { Clock, Mail, MessageSquare, Package, Star, Wallet } from 'lucide-react'
+import { Clock, Package, Star, Wallet } from 'lucide-react'
 import { money, orderTotal } from '@/lib/ravun-data'
 import { errorMessage, fetchMessages, fetchOrders, fetchProducts, fetchReviews } from '@/lib/api'
 import {
@@ -18,6 +17,8 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { LegacyImportCard } from './components/legacy-import-card'
 import { Overview } from './components/overview'
 import { RecentSales } from './components/recent-sales'
+import { WorkshopGreeting } from './components/workshop-greeting'
+import { InstallHint } from './components/install-hint'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -69,27 +70,12 @@ export function Dashboard() {
 
       {/* ===== Main ===== */}
       <Main>
-        <div className='mb-2 flex items-center justify-between space-y-2'>
-          <h1 className='text-2xl font-bold tracking-tight'>Panel</h1>
-        </div>
         {loadError && (
           <p className='mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive'>{loadError}</p>
         )}
+        <WorkshopGreeting orders={orders} pendingReviews={reviewStats.pending} unreadMessages={unreadMessages} />
+        <InstallHint />
         <LegacyImportCard onImported={load} />
-        {(reviewStats.pending > 0 || unreadMessages > 0) && (
-          <div className='mb-4 flex flex-wrap gap-2'>
-            {reviewStats.pending > 0 && (
-              <Link to='/reviews' className='inline-flex items-center gap-2 rounded-md border bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200'>
-                <MessageSquare className='size-4' /> {reviewStats.pending} yorum onay bekliyor
-              </Link>
-            )}
-            {unreadMessages > 0 && (
-              <Link to='/messages' className='inline-flex items-center gap-2 rounded-md border bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-900/30 dark:text-blue-200'>
-                <Mail className='size-4' /> {unreadMessages} okunmamış mesaj
-              </Link>
-            )}
-          </div>
-        )}
         <div className='space-y-4'>
             <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
               <Card>

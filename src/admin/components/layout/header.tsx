@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 
@@ -43,6 +45,11 @@ export function Header({ className, fixed, children, ...props }: HeaderProps) {
       >
         <SidebarTrigger variant='outline' className='max-md:scale-125' />
         <Separator orientation='vertical' className='h-6' />
+        <Button variant='ghost' size='sm' className='text-muted-foreground -ms-1 px-2' asChild>
+          <a href='/' target='_blank' rel='noreferrer' title='Siteyi yeni sekmede aç'>
+            <ExternalLink className='size-4' /> <span className='max-sm:hidden'>Siteyi aç</span>
+          </a>
+        </Button>
         {children}
       </div>
     </header>

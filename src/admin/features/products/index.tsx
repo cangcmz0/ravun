@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Eye, EyeOff, GripVertical, ImageOff, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Copy, ExternalLink, Eye, EyeOff, GripVertical, ImageOff, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import {
   DndContext,
   KeyboardSensor,
@@ -20,12 +20,14 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import {
-  CATEGORIES,
   PRODUCT_STATUS,
+  categoryKey,
+  categoryList,
   money,
   normalizeProductStatus,
+  setCategoryLabels,
 } from '@/lib/ravun-data'
-import { errorMessage, fetchProducts, saveProducts } from '@/lib/api'
+import { errorMessage, fetchProducts, fetchSettings, saveProducts } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -71,14 +73,21 @@ export function Products() {
   const [selected, setSelected] = useState<number[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<any>(null)
+  const [duplicateOf, setDuplicateOf] = useState<any>(null)
+  const [categories, setCategories] = useState<string[]>(() => categoryList(null))
   const [deleteTarget, setDeleteTarget] = useState<any>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   const [loadError, setLoadError] = useState('')
 
   useEffect(() => {
-    fetchProducts()
-      .then(setProducts)
+    // Kategori listesi Site ayarları → Kategoriler'den gelir. Ürünler etiketleri
+    // bu listeye göre gösterdiği için önce ayar, sonra ürünler yüklenir.
+    fetchSettings()
+      .then((st: any) => { setCategoryLabels(st.categories); setCategories(categoryList(st)) })
+      .catch(() => {})
+      .then(() => fetchProducts())
+      .then((list) => setProducts(list || []))
       .catch((err) => setLoadError(errorMessage(err, 'Ürünler yüklenemedi.')))
       .finally(() => setLoaded(true))
   }, [])
@@ -106,7 +115,7 @@ export function Products() {
   const filtered = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr-TR')
     return sorted
-      .filter((p) => categoryFilter === 'Tümü' || p.category === categoryFilter)
+      .filter((p) => categoryFilter === 'Tümü' || categoryKey(p.category) === categoryKey(categoryFilter))
       .filter((p) => !q || p.title?.toLocaleLowerCase('tr-TR').includes(q) || String(p.certificateNo || '').toLocaleLowerCase('tr-TR').includes(q))
   }, [sorted, query, categoryFilter])
 
@@ -120,16 +129,21 @@ export function Products() {
   }
   const toggleSelect = (id: number) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
 
-  const openAdd = () => { setEditing(null); setDialogOpen(true) }
-  const openEdit = (p: any) => { setEditing(p); setDialogOpen(true) }
+  const openAdd = () => { setEditing(null); setDuplicateOf(null); setDialogOpen(true) }
+  const openEdit = (p: any) => { setEditing(p); setDuplicateOf(null); setDialogOpen(true) }
+  // Kopya formda açılır; kaydedilene kadar hiçbir şey değişmez. Kopya gizli başlar.
+  const openDuplicate = (p: any) => { setEditing(null); setDuplicateOf(p); setDialogOpen(true) }
+  // Ürünün sitedeki sayfası (yalnızca görünür ürünler sitede açılır)
+  const siteUrl = (p: any) => `${window.location.origin}/urun/${p.id}`
 
   const handleSave = async (payload: any) => {
     const isEdit = products.some((p) => p.id === payload.id)
     const next = isEdit ? products.map((p) => (p.id === payload.id ? payload : p)) : [...products, payload]
     const ok = await persist(next)
     if (ok) {
-      toast.success(isEdit ? `${payload.title} güncellendi` : `${payload.title} eklendi`)
+      toast.success(isEdit ? `${payload.title} güncellendi` : duplicateOf ? `${payload.title} kopyalandı (gizli)` : `${payload.title} eklendi`)
       setEditing(null)
+      setDuplicateOf(null)
     }
     return ok
   }
@@ -204,7 +218,7 @@ export function Products() {
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
             <SelectTrigger className='w-48'><SelectValue /></SelectTrigger>
             <SelectContent>
-              {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+              {['Tümü', ...categories].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
           {selected.length > 0 && (
@@ -265,6 +279,8 @@ export function Products() {
                     <label className='flex items-center gap-2'><Switch checked={!!p.homeVisible} onCheckedChange={() => toggleHome(p)} aria-label='Ana sayfada göster' />Ana sayfa</label>
                   </div>
                   <div className='flex items-center gap-1'>
+                    <SiteLink p={p} url={siteUrl(p)} />
+                    <Button variant='ghost' size='icon' onClick={() => openDuplicate(p)} aria-label='Kopyala' title='Kopyasını oluştur'><Copy className='size-4' /></Button>
                     <Button variant='ghost' size='icon' onClick={() => openEdit(p)} aria-label='Düzenle'><Pencil className='size-4' /></Button>
                     <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(p)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
                   </div>
@@ -331,7 +347,9 @@ export function Products() {
                     <TableCell className='text-center'><Switch checked={p.visible !== false} onCheckedChange={() => toggleVisible(p)} aria-label='Sitede görünür' /></TableCell>
                     <TableCell className='text-center'><Switch checked={!!p.homeVisible} onCheckedChange={() => toggleHome(p)} aria-label='Ana sayfada göster' /></TableCell>
                     <TableCell className='text-end'>
-                      <div className='flex items-center justify-end gap-1'>
+                      <div className='flex items-center justify-end gap-0.5'>
+                        <SiteLink p={p} url={siteUrl(p)} />
+                        <Button variant='ghost' size='icon' onClick={() => openDuplicate(p)} aria-label='Kopyala' title='Kopyasını oluştur'><Copy className='size-4' /></Button>
                         <Button variant='ghost' size='icon' onClick={() => openEdit(p)} aria-label='Düzenle'><Pencil className='size-4' /></Button>
                         <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(p)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
                       </div>
@@ -351,6 +369,8 @@ export function Products() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         product={editing}
+        duplicateOf={duplicateOf}
+        categories={categories}
         nextId={nextId}
         nextSortOrder={nextSortOrder}
         onSave={handleSave}
@@ -418,5 +438,21 @@ function DragHandle({ handle, disabled, className = '' }: { handle: Record<strin
     >
       <GripVertical className='size-4' />
     </button>
+  )
+}
+
+// "Sitede gör": gizli ürünler sitede açılmadığı için pasif gösterilir.
+function SiteLink({ p, url }: { p: any; url: string }) {
+  if (p.visible === false) {
+    return (
+      <Button variant='ghost' size='icon' disabled aria-label='Sitede gör' title='Gizli ürün sitede görünmez'>
+        <ExternalLink className='size-4' />
+      </Button>
+    )
+  }
+  return (
+    <Button variant='ghost' size='icon' asChild>
+      <a href={url} target='_blank' rel='noreferrer' aria-label='Sitede gör' title='Sitede gör'><ExternalLink className='size-4' /></a>
+    </Button>
   )
 }

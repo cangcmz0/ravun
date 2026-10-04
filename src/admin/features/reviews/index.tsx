@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { Eye, EyeOff, MessageSquareOff, Search, Star, Trash2 } from 'lucide-react'
-import { deleteReview, errorMessage, fetchProducts, fetchReviews, setReviewApproved } from '@/lib/api'
+import { Eye, EyeOff, MessageSquareOff, Reply, Search, Star, Trash2 } from 'lucide-react'
+import { deleteReview, errorMessage, fetchProducts, fetchReviews, setReviewApproved, setReviewReply } from '@/lib/api'
+import { ReplyDialog } from './components/reply-dialog'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ConfigDrawer } from '@/components/config-drawer'
@@ -56,6 +57,7 @@ export function Reviews() {
   const [selected, setSelected] = useState<string[]>([])
   const [deleteTarget, setDeleteTarget] = useState<FlatReview | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [replyTarget, setReplyTarget] = useState<FlatReview | null>(null)
 
   const [loadError, setLoadError] = useState('')
 
@@ -119,6 +121,21 @@ export function Reviews() {
       applyLocal(new Set([key(r)]), (x) => ({ ...x, approved: !x.approved }))
     } catch (err) {
       toast.error(`Güncellenemedi: ${errorMessage(err)}`)
+    }
+  }
+
+  const handleReply = async (reply: string, approve: boolean) => {
+    if (!replyTarget) return false
+    const target = replyTarget
+    try {
+      const saved = await setReviewReply(Number(target.id), reply)
+      if (approve) await setReviewApproved(Number(target.id), true)
+      applyLocal(new Set([key(target)]), (x) => ({ ...x, reply: saved.reply, replyAt: saved.replyAt, approved: approve ? true : x.approved }))
+      toast.success(reply.trim() ? (approve ? 'Yanıt kaydedildi, yorum yayında' : 'Yanıt kaydedildi') : 'Yanıt kaldırıldı')
+      return true
+    } catch (err) {
+      toast.error(`Kaydedilemedi: ${errorMessage(err)}`)
+      return false
     }
   }
 
@@ -236,12 +253,20 @@ export function Reviews() {
                 </div>
                 <div className='mt-2'><Stars rating={r.rating} /></div>
                 <p className='mt-1 text-sm whitespace-pre-line'>{r.text}</p>
+                {r.reply && (
+                  <div className='bg-muted/60 mt-2 rounded-md border-s-2 border-primary px-2.5 py-1.5 text-xs'>
+                    <span className='font-semibold'>Ravun Atölye:</span> {r.reply}
+                  </div>
+                )}
                 <div className='mt-3 flex items-center justify-between gap-2 border-t pt-3'>
                   <label className='flex items-center gap-2 text-sm'>
                     <Switch checked={r.approved !== false} onCheckedChange={() => toggleApproved(r)} aria-label='Onaylı' />
                     {r.approved !== false ? 'Yayında' : 'Onay bekliyor'}
                   </label>
-                  <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(r)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
+                  <div className='flex items-center gap-1'>
+                    <Button variant='outline' size='sm' onClick={() => setReplyTarget(r)}><Reply className='size-4' />{r.reply ? 'Yanıtı düzenle' : 'Yanıtla'}</Button>
+                    <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(r)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
+                  </div>
                 </div>
               </div>
             )
@@ -297,6 +322,7 @@ export function Reviews() {
                     <TableCell><Stars rating={r.rating} /></TableCell>
                     <TableCell className='max-w-[280px]'>
                       <p className='truncate text-sm' title={r.text}>{r.text}</p>
+                      {r.reply && <p className='text-muted-foreground truncate text-xs' title={r.reply}>↳ Ravun Atölye: {r.reply}</p>}
                     </TableCell>
                     <TableCell className='text-center text-sm'>{r.helpful || 0}</TableCell>
                     <TableCell className='text-muted-foreground text-xs whitespace-nowrap'>{r.date}</TableCell>
@@ -304,7 +330,12 @@ export function Reviews() {
                       <Switch checked={r.approved !== false} onCheckedChange={() => toggleApproved(r)} aria-label='Onaylı' />
                     </TableCell>
                     <TableCell className='text-end'>
-                      <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(r)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
+                      <div className='flex items-center justify-end gap-0.5'>
+                        <Button variant='ghost' size='icon' onClick={() => setReplyTarget(r)} aria-label='Yanıtla' title={r.reply ? 'Yanıtı düzenle' : 'Yanıtla'}>
+                          <Reply className={r.reply ? 'text-primary size-4' : 'size-4'} />
+                        </Button>
+                        <Button variant='ghost' size='icon' onClick={() => setDeleteTarget(r)} aria-label='Sil'><Trash2 className='text-destructive size-4' /></Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 )
@@ -313,6 +344,8 @@ export function Reviews() {
           </Table>
         </div>
       </Main>
+
+      <ReplyDialog review={replyTarget} onOpenChange={(o) => !o && setReplyTarget(null)} onSave={handleReply} />
 
       <ConfirmDialog
         open={!!deleteTarget}

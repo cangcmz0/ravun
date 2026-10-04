@@ -35,21 +35,86 @@ yorumlar bir kez yüklenir.
 | Son katalog | Tarayıcı önbelleği (hızlı açılış için; her açılışta sunucudan yenilenir) |
 
 ### API uçları
-- Herkese açık: `GET /api/catalog`, `POST /api/orders`, `POST /api/reviews`,
-  `POST /api/reviews/:id/helpful`, `POST /api/messages`, `GET /api/images/:id`,
-  `GET /api/health`
+- Herkese açık: `GET /api/catalog`, `POST /api/orders`, `POST /api/orders/track`,
+  `POST /api/reviews`, `POST /api/reviews/:id/helpful`, `POST /api/messages`,
+  `GET /api/images/:id`, `GET /api/health`
 - Admin (oturum çerezi + `X-Ravun-Admin: 1` başlığı gerekir):
   `/api/admin/login|logout|session`, `products`, `settings`, `orders/:id`,
-  `reviews/:id`, `messages/:id`, `images`, `import`
+  `reviews/:id`, `messages/:id`, `images`, `import`, `notify` (+ `notify/detect`, `notify/test`),
+  `pin`, `backup`, `restore`
 
 ### Güvenlik
-- PIN artık tarayıcı koduna gömülmüyor; yalnızca sunucu ortam değişkeninde.
+- PIN tarayıcı koduna gömülmüyor. Sunucu ortam değişkenindeki `ADMIN_PIN` geçerlidir;
+  panelden (Güvenlik & yedek) değiştirilirse yeni PIN veritabanında scrypt ile saklanır
+  ve öncelik kazanır. PIN değişince diğer cihazlardaki oturumlar kapanır.
+  **Panel PIN'ini unutursanız:** Neon → SQL Editor:
+  `DELETE FROM settings WHERE key = 'admin_auth';` → ortam değişkenindeki PIN yeniden geçerli olur.
 - Oturum: imzalı, `HttpOnly` + `SameSite=Strict` çerez (8 saat).
 - Hatalı PIN: IP başına 5 deneme, sonra 15 dakika kilit (sunucuda tutulur).
 - Sipariş/yorum/mesaj gönderimi IP başına sınırlı (spam koruması).
 - Sipariş fiyatları sunucuda güncel katalogdan hesaplanır; tarayıcıda
   değiştirilen fiyat siparişe yansımaz.
 - Müşteri yorumları onaylanana kadar yayınlanmaz (Panel → Yorumlar).
+
+## Sipariş yönetimi
+- **Telegram bildirimi:** Panel → Bildirimler. @BotFather ile bot oluşturup token'ı
+  yapıştırın, bota "merhaba" yazın, "Sohbeti bul" → Kaydet → "Deneme mesajı gönder".
+  Yeni sipariş, yorum ve mesajlar anında Telegram'a düşer (her biri ayrı açılıp
+  kapatılabilir). Token veritabanında saklanır, sitede/katalogda asla görünmez.
+  Telegram'a ulaşılamazsa sipariş yine kaydedilir.
+- **Hazır WhatsApp mesajları:** Sipariş detayında duruma göre şablon (sipariş alındı,
+  ödeme bilgisi, onaylandı, üretimde, paketleniyor, kargoya verildi, teslim edildi,
+  iptal). Mesaj düzenlenebilir; "Kaydet ve WhatsApp'ta gönder" hem durumu kaydeder
+  hem mesajı açar. Kargo firması, takip adresi ve ödeme bilgisi Bildirimler
+  sayfasından girilir.
+- **Müşteri sipariş takibi:** `/siparis-takip` — sipariş numarası + telefonun son
+  4 hanesiyle durum, adım adım geçmiş, kargo kodu ve kargo takip linki. Siparişi
+  veren cihaz siparişi hatırlar (sepet sonrası "Siparişimi takip et" tek dokunuş).
+  Müşterinin adı soyadı/telefonu/notu yanıtta yer almaz; IP başına sorgu sınırı var.
+- **Yazdırma:** Sipariş listesinde ve detayında yazıcı simgesi → sipariş fişi
+  (ürünler, hediye notları, toplam, not, paketleme kontrol kutuları).
+
+## Ürün ve içerik yönetimi
+- **Ürün kopyala:** Ürünler listesinde kopyala simgesi → tüm bilgiler ve fotoğraflar
+  dolu form açılır; kopya yeni numarayla, gizli olarak ve aslının hemen arkasına eklenir.
+- **Sitede gör:** Görünür ürünlerin sitedeki sayfasını yeni sekmede açar.
+- **Kategoriler** (Site ayarları → Kategoriler): ekle, yeniden adlandır, sürükleyerek
+  sırala (sitedeki filtre sırası), boşsa sil. Ad değişince o kategorideki ürünler
+  aynı kayıtta güncellenir. Her kategorinin koleksiyon sayfası başlığı/görseli düzenlenebilir.
+- **Ana sayfa slaytları** (Site ayarları → Hero): en fazla 6 slayt; görsel yükleme,
+  metinler, telefonda görünen kısmı seçmek için odak noktası (bilgisayar/telefon
+  önizlemeli), sürükleyerek sıralama, "Bu Parçayı Gör" butonunu bir ürüne bağlama.
+- **Yorumlara yanıt** (Yorumlar → yanıt simgesi): hazır yanıtlar, sitede yorumun
+  altında "Ravun Atölye yanıtladı" olarak görünür; onay bekleyen yorum aynı anda
+  yayınlanabilir.
+
+## Güvenlik, yedek ve raporlar
+- **PIN değiştir** (Güvenlik & yedek): mevcut PIN ile onay; 6–12 rakam, 123456/000000
+  gibi kolay PIN'ler reddedilir. "Sunucu PIN'ine dön" panel PIN'ini kaldırır.
+- **Yedek:** tek tıkla JSON (ürünler, site ve sipariş mesaj ayarları, siparişler,
+  yorumlar ve yanıtları, mesajlar). Fotoğrafların kendisi, Telegram token'ı ve PIN
+  dosyaya yazılmaz. **Geri yükleme:** dosya özeti gösterilir, "GERİ YÜKLE" yazarak
+  onaylanır, başlamadan önce mevcut veriler otomatik indirilir. Sınır 4 MB; daha
+  büyük veride/sunucu taşırken `pg_dump` kullanın (fotoğraflar da dahil olur).
+- **Satış raporları** (Raporlar): son 7/30/90 gün, bu ay, geçen ay, bu yıl, tümü.
+  Ciro, sipariş, ortalama sepet, iptal oranı (önceki döneme göre değişimle), hediye
+  paketi oranı, günlük/haftalık/aylık ciro grafiği, en çok satan ürünler, kategori
+  dağılımı, durum dağılımı ve Excel'e (CSV) aktarma. İptaller ciroya dahil edilmez.
+
+## Ravun'a özgü detaylar
+- **Parça kimliği:** Ürün sayfasında lazerle kazınmış ahşap etiket görünümünde kart
+  (parça no, ahşap, epoksi, ölçü, el işçiliği süresi, bitiş, "tek parça" mührü).
+- **İkinci fotoğraf:** Ürün kartının üzerine gelince (fareli cihazlarda) galerideki
+  ikinci fotoğraf görünür.
+- **Sipariş takibi:** adımlar atölye simgeleriyle (fiş, onay mührü, epoksi dökümü,
+  paket, kargo, ev); bulunulan adım hafifçe nabız atar.
+- **Özel 404:** "Bu parça atölyeden çıkmamış"; kaldırılmış ürün linklerinde
+  "Bu parça artık koleksiyonda değil" + "Benzerini sor" (WhatsApp). Arama motorlarına
+  `noindex` bildirilir.
+- **Panel:** kenar çubuğunda Ravun logosu, fotoğraflı giriş ekranı, günün selamı ve
+  yapılacaklar ("1 sipariş onay bekliyor" gibi tıklanabilir), her sayfada "Siteyi aç".
+- **Telefonda uygulama gibi:** Panel ana ekrana eklenebilir (`/admin.webmanifest`,
+  "Ravun Panel" adı ve simgesi). Telefonda panelde bir kez öneri kartı çıkar.
 
 ## Vercel kurulumu (bir kez)
 
@@ -111,6 +176,7 @@ npm run dev               # site + panel + API birlikte (Vite içinde)
 - `scripts/prerender.mjs` SEO önizleme sayfalarını hâlâ `src/data/products.json`'dan
   üretiyor. Panelden eklenen yeni ürünler normal çalışır ama paylaşım
   önizlemesi (og:image vb.) genel site bilgisini gösterir.
-- Sipariş durumu değişince müşteriye otomatik bildirim (e-posta/WhatsApp) yok.
+- Sipariş durumu değişince müşteriye mesaj otomatik gitmiyor; panelde hazır
+  WhatsApp mesajı tek tıkla gönderiliyor (WhatsApp Business API ücretli olduğu için).
 - Online ödeme yok; ödeme WhatsApp üzerinden konuşuluyor.
 - Kök dizindeki `style.css` sitede kullanılmıyor (asıl dosya `src/style.css`).

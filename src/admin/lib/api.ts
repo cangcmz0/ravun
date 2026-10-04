@@ -100,9 +100,10 @@ export async function fetchSettings() {
   const { settings } = await request<{ settings: any }>('/admin/settings')
   return normalizeSiteSettings(settings)
 }
-export async function saveSettings(settings: any) {
+// renames: yeniden adlandırılan kategoriler; sunucu o kategorideki ürünleri de günceller.
+export async function saveSettings(settings: any, renames: { from: string; to: string }[] = []) {
   const prepared = await uploadInlineImages(settings)
-  const res = await request<{ settings: any }>('/admin/settings', 'PUT', { settings: prepared })
+  const res = await request<{ settings: any; renamed?: number }>('/admin/settings', 'PUT', { settings: prepared, renames })
   return normalizeSiteSettings(res.settings)
 }
 
@@ -127,6 +128,11 @@ export async function fetchReviews(): Promise<Record<string, any[]>> {
 export async function setReviewApproved(id: number, approved: boolean) {
   await request(`/admin/reviews/${id}`, 'PATCH', { approved })
 }
+// Atölyenin yoruma yanıtı (boş metin yanıtı kaldırır)
+export async function setReviewReply(id: number, reply: string) {
+  const { review } = await request<{ review: any }>(`/admin/reviews/${id}`, 'PATCH', { reply })
+  return review
+}
 export async function deleteReview(id: number) {
   await request(`/admin/reviews/${id}`, 'DELETE')
 }
@@ -141,6 +147,60 @@ export async function setMessageRead(id: number, read: boolean) {
 }
 export async function deleteMessage(id: number) {
   await request(`/admin/messages/${id}`, 'DELETE')
+}
+
+// ── BİLDİRİMLER (Telegram) VE SİPARİŞ MESAJ AYARLARI ──
+export type NotifySettings = {
+  hasToken: boolean
+  tokenHint: string
+  tokenFromEnv: boolean
+  telegramChatId: string
+  events: { orders: boolean; reviews: boolean; messages: boolean }
+  paymentInfo: string
+  cargoCompany: string
+  cargoTrackUrl: string
+}
+export async function fetchNotify() {
+  const { notify } = await request<{ notify: NotifySettings }>('/admin/notify')
+  return notify
+}
+export async function saveNotify(patch: Partial<NotifySettings> & { telegramToken?: string }) {
+  const { notify } = await request<{ notify: NotifySettings }>('/admin/notify', 'PUT', { notify: patch })
+  return notify
+}
+export async function detectTelegramChats(token?: string) {
+  const { chats } = await request<{ chats: { id: string; name: string; type: string }[] }>('/admin/notify/detect', 'POST', { token: token || '' })
+  return chats
+}
+export async function testTelegram() {
+  await request('/admin/notify/test', 'POST', {})
+}
+
+// ── PIN ──
+export type PinInfo = { source: 'panel' | 'env'; updatedAt: string | null; envAvailable: boolean }
+export async function fetchPinInfo() {
+  const { pin } = await request<{ pin: PinInfo }>('/admin/pin')
+  return pin
+}
+export async function changePin(current: string, next: string) {
+  const { pin } = await request<{ pin: PinInfo }>('/admin/pin', 'POST', { current, next })
+  return pin
+}
+export async function resetPanelPin(current: string) {
+  const { pin } = await request<{ pin: PinInfo }>('/admin/pin', 'DELETE', { current })
+  return pin
+}
+
+// ── YEDEK ──
+export async function fetchBackup() {
+  const { backup } = await request<{ backup: any }>('/admin/backup')
+  return backup
+}
+export async function restoreBackup(backup: any) {
+  const { restored } = await request<{ restored: { products: number; orders: number; reviews: number; messages: number } }>(
+    '/admin/restore', 'POST', { backup, confirm: 'GERİ YÜKLE' },
+  )
+  return restored
 }
 
 // ── ESKİ TARAYICI VERİSİNİ SUNUCUYA AKTARMA ──

@@ -112,9 +112,36 @@ export function categoryKey(value: any) {
   }
   return aliases[key] || key
 }
+// Panelden yönetilen kategori adları (Site ayarları → Kategoriler). Ayar
+// yüklendiğinde setCategoryLabels ile güncellenir; etiket aramada önceliklidir.
+let customCategoryLabels: Record<string, string> = {}
+export function setCategoryLabels(list?: string[]) {
+  customCategoryLabels = Object.fromEntries((Array.isArray(list) ? list : []).map((l) => [categoryKey(l), l]))
+}
 export function categoryLabelFromKey(key: string, fallback = '') {
   const labels: Record<string, string> = { 'tum': 'Tümü', 'duvar-rafi': 'Duvar Rafı', 'bicak-standi': 'Bıçak Standı', 'masaustu': 'Masaüstü', 'sunum-tahtasi': 'Sunum Tahtası', 'paketleme': 'Paketleme' }
-  return labels[key] || fallback || key.split('-').map((x) => x ? x[0].toLocaleUpperCase('tr-TR') + x.slice(1) : x).join(' ')
+  return customCategoryLabels[key] || labels[key] || fallback || key.split('-').map((x) => x ? x[0].toLocaleUpperCase('tr-TR') + x.slice(1) : x).join(' ')
+}
+export const DEFAULT_CATEGORIES = CATEGORIES.slice(1)
+// Sıralı kategori listesi ("Tümü" hariç). Ayarda liste yoksa varsayılanlar.
+export function categoryList(settings: any): string[] {
+  const list = Array.isArray(settings?.categories) ? settings.categories.filter((x: any) => typeof x === 'string' && x.trim()) : []
+  return list.length ? list : DEFAULT_CATEGORIES
+}
+
+// ── ANA SAYFA SLAYTLARI ──
+export type HeroSlide = { image: string; tag: string; line1: string; line2: string; pos: number; productId: number }
+export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
+  { image: `${A}products_hero-1.webp`, tag: 'SİPARİŞ ÜZERİNE', line1: 'Atölyeden', line2: 'masanıza.', pos: 21, productId: 0 },
+  { image: `${A}products_hero-3.webp`, tag: 'RAVUN ATÖLYE', line1: 'Sanat olarak', line2: 'işlev.', pos: 73, productId: 0 },
+  { image: `${A}products_hero-2.webp`, tag: 'SINIRLI ÜRETİM', line1: 'Her parça,', line2: 'tek.', pos: 56, productId: 0 },
+]
+// Ayarda slayt yoksa varsayılanlar (eski tek-slayt metin ayarları ilk slayta uygulanır).
+export function heroSlidesFrom(settings: any): HeroSlide[] {
+  if (Array.isArray(settings?.heroSlides) && settings.heroSlides.length) return settings.heroSlides
+  return DEFAULT_HERO_SLIDES.map((sl, i) => (i === 0
+    ? { ...sl, tag: settings?.heroTag || sl.tag, line1: settings?.heroLine1 || sl.line1, line2: settings?.heroLine2 || sl.line2 }
+    : { ...sl }))
 }
 
 // ── ÜRÜN DURUMU ──
