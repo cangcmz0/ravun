@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { AlertTriangle, ExternalLink, MessageCircle, Phone, Printer, Send } from 'lucide-react'
-import { ORDER_STATUSES, money, orderStatusLabel, orderTotal } from '@/lib/ravun-data'
+import { ORDER_STATUSES, money, orderStatusLabel, orderSubtotal, orderTotal } from '@/lib/ravun-data'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -168,6 +168,11 @@ export function OrderDetailDialog({ open, onOpenChange, order, onSave, msgConfig
                 <div className='text-muted-foreground p-3 text-sm'>Ürün bilgisi yok.</div>
               )}
             </div>
+            {Number(order.discount) > 0 && (
+              <div className='text-muted-foreground text-end text-sm'>
+                Ara toplam: {money(orderSubtotal(order))} · Kupon <b>{order.coupon}</b>: −{money(order.discount)}
+              </div>
+            )}
             <div className='text-end text-sm font-medium'>Toplam: {money(orderTotal(order))}</div>
           </div>
 

@@ -380,7 +380,9 @@ export const ORDER_STATUSES: [string, string][] = [
   ['cancelled', 'İptal edildi'],
 ]
 export function orderStatusLabel(status: string) { return ORDER_STATUSES.find(([k]) => k === status)?.[1] || 'Beklemede' }
-export function orderTotal(order: any) { return (order.items || []).reduce((s: number, x: any) => s + (Number(x.price) || 0) * (Number(x.qty) || 1), 0) }
+export function orderSubtotal(order: any) { return (order.items || []).reduce((s: number, x: any) => s + (Number(x.price) || 0) * (Number(x.qty) || 1), 0) }
+// Kuponlu siparişte indirim düşülmüş tutar (ciro ve raporlar da bunu kullanır).
+export function orderTotal(order: any) { return Math.max(0, orderSubtotal(order) - (Number(order.discount) || 0)) }
 function normalizeCartForOrder(value: any): any[] {
   if (!Array.isArray(value)) return []
   return value.slice(0, 200).map((item: any) => ({

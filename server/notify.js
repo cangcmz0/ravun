@@ -196,7 +196,9 @@ export function orderMessage(order, origin) {
     lines.push(`• ${it.qty} × ${escapeHtml(it.title)}${variant ? ` <i>(${escapeHtml(variant)})</i>` : ''} — ${tl(it.price * it.qty)}`)
     if (it.giftWrap) lines.push(`   🎁 Hediye paketi${it.giftNote ? `: “${escapeHtml(it.giftNote)}”` : ''}`)
   }
-  lines.push('', `<b>Toplam: ${tl(order.total)}</b>`)
+  lines.push('')
+  if (order.discount) lines.push(`🏷 Kupon ${escapeHtml(order.coupon)}: −${tl(order.discount)}`)
+  lines.push(`<b>Toplam: ${tl(order.total)}</b>`)
   lines.push(`👤 ${escapeHtml(order.customerName || '—')}`)
   if (order.customerPhone) lines.push(`📞 ${escapeHtml(order.customerPhone)}`)
   if (order.note) lines.push(`📝 ${escapeHtml(order.note)}`)
@@ -213,6 +215,7 @@ export function reviewMessage(review, productTitle, origin) {
     `“${escapeHtml(review.text.slice(0, 600))}”`,
     `— ${escapeHtml(review.name)}`,
   ]
+  if (review.photos) lines.push(`📷 ${review.photos} fotoğraf eklendi`)
   if (origin) lines.push('', `<a href="${escapeHtml(origin)}/admin/reviews">Onaylamak için panele git</a>`)
   return lines.join('\n')
 }

@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_id);
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reply text;
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reply_at timestamptz;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS photos jsonb NOT NULL DEFAULT '[]'::jsonb;
 CREATE TABLE IF NOT EXISTS messages (
   id bigserial PRIMARY KEY,
   data jsonb NOT NULL,

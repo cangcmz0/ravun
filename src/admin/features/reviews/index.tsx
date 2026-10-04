@@ -253,6 +253,15 @@ export function Reviews() {
                 </div>
                 <div className='mt-2'><Stars rating={r.rating} /></div>
                 <p className='mt-1 text-sm whitespace-pre-line'>{r.text}</p>
+                {Array.isArray(r.photos) && r.photos.length > 0 && (
+                  <div className='mt-2 flex gap-2'>
+                    {r.photos.map((u: string) => (
+                      <a key={u} href={u} target='_blank' rel='noreferrer' title='Fotoğrafı büyük aç'>
+                        <img src={u} alt='Müşteri fotoğrafı' loading='lazy' className='size-16 rounded-md border object-cover' />
+                      </a>
+                    ))}
+                  </div>
+                )}
                 {r.reply && (
                   <div className='bg-muted/60 mt-2 rounded-md border-s-2 border-primary px-2.5 py-1.5 text-xs'>
                     <span className='font-semibold'>Ravun Atölye:</span> {r.reply}

@@ -238,7 +238,7 @@ function cartItemLine(item) {
   ].filter(Boolean);
   return `• ${item.title} x${item.qty}: ${money(item.price*item.qty)}\n  Parça No: ${certificateNo(item)} · Durum: ${st.label}${details.length ? `\n  ${details.join('\n  ')}` : ''}`;
 }
-function buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created}) {
+function buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created,coupon}) {
   return [
     'Merhaba, Ravun üzerinden sipariş vermek istiyorum.',
     '',
@@ -247,7 +247,8 @@ function buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,creat
     '',
     `Toplam ürün: ${itemCount}`,
     giftCount ? `Hediye paketli ürün: ${giftCount}` : '',
-    `Toplam: ${money(total)}`,
+    coupon ? `Kupon: ${coupon.code} (−${money(coupon.discount)})` : '',
+    `Toplam: ${money(coupon ? total - coupon.discount : total)}`,
     customer?.name ? `Müşteri: ${customer.name}` : '',
     customer?.phone ? `Telefon: ${customer.phone}` : '',
     customer?.note ? `Sipariş notu: ${customer.note}` : '',
@@ -389,7 +390,7 @@ async function apiPost(path, body) {
     throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.');
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error || 'İşlem tamamlanamadı.');
+  if (!res.ok) { const err = new Error(data?.error || 'İşlem tamamlanamadı.'); err.field = data?.field; throw err; }
   return data;
 }
 // Müşteri hesabı uçları için: GET/PUT/POST, çerez aynı sitede otomatik gider.
@@ -562,7 +563,8 @@ function normalizeReviews(value) {
       text: cleanText(r?.text || '', 700),
       helpful: safeNumber(r?.helpful, 0, 0, 99999),
       approved: r?.approved !== false,
-      reply: cleanText(r?.reply || '', 1000)
+      reply: cleanText(r?.reply || '', 1000),
+      photos: (Array.isArray(r?.photos) ? r.photos : []).filter(u => typeof u === 'string' && /^\/api\/images\/[a-f0-9]{24}\.(webp|jpg|png|gif)$/.test(u)).slice(0, 3)
     }));
   });
   return fixed;
@@ -1044,17 +1046,53 @@ function ZoomLightbox({images=[],index=0,alt,onClose,onIndex}){
     </div>
   );
 }
+/* ── YORUM FOTOĞRAFI: tarayıcıda küçültülüp WebP olarak gönderilir ── */
+function shrinkPhoto(file, max = 1280){
+  return new Promise((resolve, reject)=>{
+    if(!/^image\//.test(file?.type||'')) return reject(new Error('Lütfen bir fotoğraf seçin.'));
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const scale=Math.min(1, max/Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.max(1, Math.round(img.naturalWidth*scale));
+      canvas.height=Math.max(1, Math.round(img.naturalHeight*scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      let out=canvas.toDataURL('image/webp', 0.8);
+      if(!out.startsWith('data:image/webp')) out=canvas.toDataURL('image/jpeg', 0.82);
+      resolve(out);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Fotoğraf açılamadı. Başka bir dosya deneyin.')); };
+    img.src=url;
+  });
+}
 /* ── REVIEW SECTION ── */
 function ReviewSection({productId, allReviews, setAllReviews}){
   const [tab,setTab]=useState('list');
   const [form,setForm]=useState({name:'',text:'',rating:5});
+  const [photos,setPhotos]=useState([]);
+  const [viewer,setViewer]=useState(null);
+  const [onlyPhotos,setOnlyPhotos]=useState(false);
   const [helpfulMap,setHelpfulMap]=useState({});
   const [sent,setSent]=useState(false);
   const reviews=useMemo(()=>reviewList(allReviews, productId),[allReviews,productId]);
+  const photoCount=reviews.filter(r=>r.photos?.length).length;
+  const shown=onlyPhotos?reviews.filter(r=>r.photos?.length):reviews;
   const avg=useMemo(()=>reviews.length?reviews.reduce((s,r)=>s+r.rating,0)/reviews.length:0,[reviews]);
   const dist=useMemo(()=>{const d={5:0,4:0,3:0,2:0,1:0};reviews.forEach(r=>{d[r.rating]=(d[r.rating]||0)+1;});return d;},[reviews]);
   const [sending,setSending]=useState(false);
   const [error,setError]=useState('');
+  const addPhotos=async e=>{
+    const files=[...(e.target.files||[])].slice(0, 3-photos.length);
+    e.target.value='';
+    setError('');
+    try{
+      const next=[];
+      for(const f of files) next.push(await shrinkPhoto(f));
+      setPhotos(p=>[...p, ...next].slice(0,3));
+    }catch(err){ setError(err.message); }
+  };
   const submitReview=async()=>{
     const cleanName = (form.name||'').trim().slice(0, 60).replace(/[<>]/g,'');
     const cleanText = (form.text||'').trim().slice(0, 1200).replace(/[<>]/g,'');
@@ -1069,8 +1107,8 @@ function ReviewSection({productId, allReviews, setAllReviews}){
     const rating = Math.min(5, Math.max(1, Number(form.rating)||5));
     setSending(true); setError('');
     try {
-      await apiPost('/reviews', {productId, name:cleanName, text:cleanText, rating});
-      setForm({name:'',text:'',rating:5}); setSent(true);
+      await apiPost('/reviews', {productId, name:cleanName, text:cleanText, rating, photos});
+      setForm({name:'',text:'',rating:5}); setPhotos([]); setSent(true);
       setTimeout(()=>{setSent(false);setTab('list');},4000);
     } catch (err) {
       setError(err.message);
@@ -1108,8 +1146,14 @@ function ReviewSection({productId, allReviews, setAllReviews}){
       </div>
       {tab==='list'&&(
         <div className="reviewListArea">
+          {photoCount>0&&(
+            <div className="reviewFilter">
+              <button className={!onlyPhotos?'on':''} onClick={()=>setOnlyPhotos(false)}>Tümü ({reviews.length})</button>
+              <button className={onlyPhotos?'on':''} onClick={()=>setOnlyPhotos(true)}>Fotoğraflı ({photoCount})</button>
+            </div>
+          )}
           {reviews.length===0?<p className="reviewEmpty">Henüz yorum yok. İlk yorumu siz yazın!</p>
-            :reviews.map(r=>(
+            :shown.map(r=>(
             <div key={r.id} className="reviewItem">
               <div className="reviewHead">
                 <div className="reviewAvatar">{r.avatar}</div>
@@ -1117,6 +1161,11 @@ function ReviewSection({productId, allReviews, setAllReviews}){
                 <StarRating rating={r.rating} size="xs"/>
               </div>
               <p className="reviewText">{r.text}</p>
+              {r.photos?.length>0&&(
+                <div className="reviewPhotos">
+                  {r.photos.map((u,i)=><button key={u} onClick={()=>setViewer({list:r.photos,i,name:r.name})} aria-label={`${r.name} fotoğrafı ${i+1}`}><img src={u} alt="" loading="lazy"/></button>)}
+                </div>
+              )}
               {r.reply&&<div className="reviewReply"><b><i aria-hidden="true">R</i>Ravun Atölye yanıtladı</b><p>{r.reply}</p></div>}
               <button className={`helpfulBtn ${helpfulMap[r.id]?'helpfulDone':''}`} onClick={()=>markHelpful(r.id)}>
                 <IThumbUp/> Faydalı ({r.helpful})
@@ -1132,10 +1181,36 @@ function ReviewSection({productId, allReviews, setAllReviews}){
               <div className="writeReviewField"><label>Puanınız</label><StarRating rating={form.rating} size="md" interactive onSet={n=>setForm(f=>({...f,rating:n}))}/></div>
               <div className="writeReviewField"><label>Adınız</label><input className="reviewInput" placeholder="Ad Soyad" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
               <div className="writeReviewField"><label>Yorumunuz</label><textarea className="reviewTextarea" placeholder="Ürün hakkındaki deneyiminizi paylaşın…" rows={4} value={form.text} onChange={e=>setForm(f=>({...f,text:e.target.value}))}/></div>
+              <div className="writeReviewField">
+                <label>Fotoğraf <small>(isteğe bağlı, en fazla 3)</small></label>
+                <div className="reviewPhotoPick">
+                  {photos.map((d,i)=>(
+                    <span key={i} className="reviewPhotoThumb"><img src={d} alt=""/><button type="button" onClick={()=>setPhotos(p=>p.filter((_,j)=>j!==i))} aria-label="Fotoğrafı kaldır">×</button></span>
+                  ))}
+                  {photos.length<3&&(
+                    <label className="reviewPhotoAdd">
+                      <input type="file" accept="image/*" multiple onChange={addPhotos}/>
+                      <span aria-hidden="true">+</span><small>Fotoğraf ekle</small>
+                    </label>
+                  )}
+                </div>
+              </div>
               {error&&<p className="reviewError" role="alert">{error}</p>}
               <button className="reviewSubmit" onClick={submitReview} disabled={!form.name||!form.text||sending}>{sending?'Gönderiliyor…':'Yorum Gönder ↗'}</button>
             </>
           )}
+        </div>
+      )}
+      {viewer&&(
+        <div className="reviewViewer" role="dialog" aria-modal="true" aria-label="Müşteri fotoğrafı" onClick={()=>setViewer(null)}
+          onKeyDown={e=>{if(e.key==='Escape')setViewer(null);}} tabIndex={-1} ref={el=>el?.focus()}>
+          <img src={viewer.list[viewer.i]} alt={`${viewer.name} tarafından paylaşılan fotoğraf`} onClick={e=>e.stopPropagation()}/>
+          {viewer.list.length>1&&(
+            <div className="reviewViewerNav" onClick={e=>e.stopPropagation()}>
+              {viewer.list.map((u,i)=><button key={u} className={i===viewer.i?'on':''} onClick={()=>setViewer(v=>({...v,i}))} aria-label={`Fotoğraf ${i+1}`}/>)}
+            </div>
+          )}
+          <button className="reviewViewerClose" onClick={()=>setViewer(null)} aria-label="Kapat">×</button>
         </div>
       )}
     </div>
@@ -1939,14 +2014,16 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
   const [orderError,setOrderError]=useState('');
   const [touched,setTouched]=useState(false);
   const [accepted,setAccepted]=useState(false);
+  const [coupon,setCoupon]=useState(null);
   const total=useMemo(()=>cart.reduce((s,x)=>s+x.price*x.qty,0),[cart]);
+  const payable=coupon?Math.max(0,total-coupon.discount):total;
   const itemCount=cart.reduce((s,x)=>s+Number(x.qty||0),0);
   const giftCount=cart.filter(x=>x.giftWrap).length;
   const giftTotal=cart.reduce((s,x)=>s+(x.giftWrap?Number(x.giftPrice||0)*x.qty:0),0);
   const phoneDigits=customer.phone.replace(/\D/g,'');
   const nameOk=customer.name.trim().length>=2;
   const phoneOk=phoneDigits.length>=10;
-  const waUrl=order=>`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created:order}))}`;
+  const waUrl=order=>`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(buildCartWhatsAppMessage({cart,total,itemCount,giftCount,customer,created:order,coupon}))}`;
   useEffect(()=>{
     if(!open)return;
     // Not: body scroll kilidi App seviyesinde (drawer) merkezi olarak yönetilir.
@@ -1959,16 +2036,17 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
     // Sipariş tamamlandıysa çekmece kapanırken sepet temizlenir ve akış başa döner.
     if(created) clearCart?.();
     setCreated(null); setOrderError(''); setTouched(false); setStep('cart');
-    if(created) setCustomer({name:'',phone:'',note:''});
+    if(created){ setCustomer({name:'',phone:'',note:''}); setCoupon(null); }
   },[open]);
   const submitOrder=async()=>{
     setTouched(true);
     if(!nameOk||!phoneOk||!accepted||busy||cart.length===0)return;
     setBusy(true); setOrderError('');
     try{
-      const order=await createOrder({customerName:customer.name.trim(),customerPhone:customer.phone.trim(),note:customer.note.trim(),acceptedTerms:true});
+      const order=await createOrder({customerName:customer.name.trim(),customerPhone:customer.phone.trim(),note:customer.note.trim(),acceptedTerms:true,couponCode:coupon?.code||''});
       setCreated(order); setStep('done');
     }catch(err){
+      if(err.field==='coupon') setCoupon(null);
       setOrderError(err.message||'Sipariş oluşturulamadı.');
     }finally{ setBusy(false); }
   };
@@ -1983,7 +2061,7 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
           {step==='info'
             ? <button className="cxBack" onClick={()=>setStep('cart')} aria-label="Sepete dön"><IChevron dir="left"/></button>
             : <span className="cxHeadIcon"><ICart/></span>}
-          <div><h3>{title}</h3>{step!=='done'&&cart.length>0&&<small>{itemCount} ürün · {money(total)}</small>}</div>
+          <div><h3>{title}</h3>{step!=='done'&&cart.length>0&&<small>{itemCount} ürün · {money(payable)}</small>}</div>
           <button className="cxClose" onClick={close} aria-label="Sepeti kapat"><IClose/></button>
         </header>
 
@@ -2038,7 +2116,8 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
               )}
             </div>
             <footer className="cxFoot">
-              <div className="cxTotal"><span>Toplam</span><b>{money(total)}</b></div>
+              {coupon&&<div className="cxLine cxDiscount"><span>Kupon {coupon.code}</span><span>−{money(coupon.discount)}</span></div>}
+              <div className="cxTotal"><span>Toplam</span><b>{money(payable)}</b></div>
               <button className="cxBtn" onClick={submitOrder} disabled={busy}>{busy?'Gönderiliyor…':'Siparişi tamamla'}</button>
               <small className="cxFine">Ödeme bu aşamada alınmaz; siparişiniz onaylandıktan sonra iletişime geçeriz.</small>
             </footer>
@@ -2072,13 +2151,50 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
             </div>
             <footer className="cxFoot">
               {giftTotal>0&&<div className="cxLine"><span>Hediye paketi</span><span>{money(giftTotal)}</span></div>}
-              <div className="cxTotal"><span>Toplam</span><b>{money(total)}</b></div>
+              <CouponBox subtotal={total} coupon={coupon} setCoupon={setCoupon}/>
+              <div className="cxTotal"><span>Toplam</span><b>{money(payable)}</b></div>
               <button className="cxBtn" onClick={()=>setStep('info')}>Siparişe devam et</button>
               <a className="cxLink" href={waUrl(null)} target="_blank" rel="noreferrer"><IWA/> Önce soru sormak için WhatsApp</a>
             </footer>
           </>
         )}
       </aside>
+    </div>
+  );
+}
+/* ── İNDİRİM KODU (sepet) ──
+   Kod sunucuda doğrulanır; sepet tutarı değişince indirim yeniden hesaplanır. */
+function CouponBox({subtotal, coupon, setCoupon}){
+  const [open,setOpen]=useState(false);
+  const [code,setCode]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [msg,setMsg]=useState('');
+  const check=async(c, quiet=false)=>{
+    if(!c.trim()||busy)return;
+    setBusy(true); if(!quiet) setMsg('');
+    try{
+      const r=await apiPost('/coupons/check',{code:c.trim(),subtotal});
+      setCoupon({code:r.code,discount:r.discount,label:r.label}); setMsg('');
+    }catch(err){
+      setCoupon(null); setMsg(err.message);
+    }finally{ setBusy(false); }
+  };
+  useEffect(()=>{ if(coupon) check(coupon.code, true); },[subtotal]); // eslint-disable-line react-hooks/exhaustive-deps
+  if(coupon) return (
+    <div className="cxLine cxDiscount">
+      <span>Kupon <b>{coupon.code}</b> · {coupon.label}<button type="button" className="cxCouponRemove" onClick={()=>{setCoupon(null);setCode('');}} aria-label="Kuponu kaldır">Kaldır</button></span>
+      <span>−{money(coupon.discount)}</span>
+    </div>
+  );
+  return (
+    <div className="cxCoupon">
+      {!open ? <button type="button" className="cxCouponToggle" onClick={()=>setOpen(true)}>İndirim kodunuz var mı?</button> : (
+        <form className="cxCouponForm" onSubmit={e=>{e.preventDefault();check(code);}}>
+          <input value={code} onChange={e=>setCode(e.target.value)} placeholder="Kupon kodu" aria-label="Kupon kodu" autoCapitalize="characters" autoComplete="off" maxLength={24}/>
+          <button type="submit" disabled={busy||!code.trim()}>{busy?'…':'Uygula'}</button>
+        </form>
+      )}
+      {msg&&<em className="cxCouponMsg" role="alert">{msg}</em>}
     </div>
   );
 }
@@ -2389,6 +2505,7 @@ function TrackResult({order, go}){
           </li>
         ))}
       </ul>
+      {order.discount>0&&<div className="trkTotal trkDiscount"><span>Kupon {order.coupon}</span><span>−{money(order.discount)}</span></div>}
       <div className="trkTotal"><span>Toplam</span><b>{money(order.total||0)}</b></div>
       <div className="trkHelp">
         <a href={waHelp} target="_blank" rel="noreferrer"><IWA/> Sorunuz mu var? WhatsApp'tan yazın</a>
@@ -2991,7 +3108,8 @@ function App(){
       customerName:customer.customerName||'',
       customerPhone:customer.customerPhone||'',
       note:customer.note||'',
-      acceptedTerms:customer.acceptedTerms===true
+      acceptedTerms:customer.acceptedTerms===true,
+      couponCode:customer.couponCode||''
     });
     rememberMyOrder(order.orderNo, customer.customerPhone);
     if(toastTimer.current)clearTimeout(toastTimer.current);

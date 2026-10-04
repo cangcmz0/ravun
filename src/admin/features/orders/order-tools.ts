@@ -181,6 +181,7 @@ td{border-bottom:1px solid #eee5da;padding:8px 4px;vertical-align:top}
 .thumb{width:52px}.thumb img,.thumb .ph{display:block;width:44px;height:44px;border-radius:6px;object-fit:cover;background:#f0e8d8}
 .muted{color:#7a6a58;font-size:12px}.gift{margin-top:4px;font-size:12px;color:#5a4632}
 .total{display:flex;justify-content:flex-end;gap:24px;font-size:16px;margin-top:12px}
+.total.sub{font-size:13px;color:#7a6a58;margin-top:8px}
 .note{margin-top:16px}
 .checks{margin-top:22px;display:flex;gap:18px;flex-wrap:wrap;color:#5a4632}
 .checks span::before{content:"";display:inline-block;width:12px;height:12px;border:1.5px solid #8b6534;border-radius:3px;margin-right:6px;vertical-align:-2px}
@@ -192,6 +193,7 @@ footer{margin-top:28px;border-top:1px solid #d9cfc2;padding-top:10px;font-size:1
 <div class="box"><h4>Durum</h4><b>${esc(orderStatusLabel(order.status))}</b>${order.cargoCode ? `<div>Kargo kodu: ${esc(order.cargoCode)}</div>` : ''}</div>
 </div>
 <table><thead><tr><th></th><th>Ürün</th><th class="num">Adet</th><th class="num">Birim</th><th class="num">Tutar</th></tr></thead><tbody>${rows || '<tr><td colspan="5">Ürün bilgisi yok.</td></tr>'}</tbody></table>
+${Number(order.discount) > 0 ? `<div class="total sub"><span>Kupon ${esc(order.coupon || '')}</span><span>−${esc(money(order.discount))}</span></div>` : ''}
 <div class="total"><span>Toplam</span><b>${esc(money(orderTotal(order)))}</b></div>
 ${order.note ? `<div class="note box"><h4>Not</h4>${esc(order.note)}</div>` : ''}
 <div class="checks"><span>Ürün kontrol edildi</span><span>Bakım kartı eklendi</span><span>Paketlendi</span><span>Kargoya verildi</span></div>

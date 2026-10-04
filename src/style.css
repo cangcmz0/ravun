@@ -7111,3 +7111,43 @@ html body .cookieNote p{margin:0;font:400 13px/1.5 var(--sans);flex:1}
 html body .cookieNote .linkBtn{color:#7FD3B6}
 html body .cookieOk{flex:none;border:0;border-radius:999px;padding:10px 16px;background:#F1E8DA;color:#2B1D10;font:800 13px/1 var(--sans);cursor:pointer}
 @media (max-width:900px){html body .cookieNote{bottom:calc(92px + env(safe-area-inset-bottom,0px))}}
+
+/* ── YORUM FOTOĞRAFLARI ── */
+html body .reviewFilter{display:flex;gap:8px;margin:0 0 14px}
+html body .reviewFilter button{border:1px solid var(--border);background:var(--bg-card);border-radius:999px;padding:7px 13px;font:600 12.5px/1 var(--sans);color:var(--text-muted);cursor:pointer}
+html body .reviewFilter button.on{background:var(--text-main);border-color:var(--text-main);color:#fff}
+html body .reviewPhotos{display:flex;gap:8px;margin:10px 0 4px;flex-wrap:wrap}
+html body .reviewPhotos button{width:76px;height:76px;padding:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:zoom-in;background:var(--bg-card)}
+html body .reviewPhotos img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s}
+html body .reviewPhotos button:hover img{transform:scale(1.06)}
+html body .reviewPhotoPick{display:flex;gap:10px;flex-wrap:wrap}
+html body .reviewPhotoThumb{position:relative;width:76px;height:76px;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+html body .reviewPhotoThumb img{width:100%;height:100%;object-fit:cover;display:block}
+html body .reviewPhotoThumb button{position:absolute;top:4px;right:4px;width:22px;height:22px;border:0;border-radius:50%;background:rgba(20,12,4,.72);color:#fff;font:600 15px/1 var(--sans);cursor:pointer;display:grid;place-items:center}
+html body .reviewPhotoAdd{width:76px;height:76px;border:1.5px dashed var(--border);border-radius:12px;display:grid;place-content:center;justify-items:center;gap:2px;cursor:pointer;color:var(--text-muted);background:var(--bg-card)}
+html body .reviewPhotoAdd:hover{border-color:var(--emerald-mid);color:var(--emerald-mid)}
+html body .reviewPhotoAdd input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+html body .reviewPhotoAdd span{font:300 26px/1 var(--sans)}
+html body .reviewPhotoAdd small{font:600 10.5px/1.1 var(--sans);text-align:center}
+html body .writeReviewField label small{font-weight:400;color:var(--text-muted);letter-spacing:0;text-transform:none}
+html body .reviewViewer{position:fixed;inset:0;z-index:300;background:rgba(15,9,3,.9);display:grid;place-items:center;padding:20px;outline:none}
+html body .reviewViewer img{max-width:min(92vw,1100px);max-height:82vh;border-radius:14px;object-fit:contain;box-shadow:0 30px 60px -20px rgba(0,0,0,.6)}
+html body .reviewViewerNav{position:absolute;bottom:24px;left:0;right:0;display:flex;justify-content:center;gap:8px}
+html body .reviewViewerNav button{width:10px;height:10px;border-radius:50%;border:0;padding:0;background:rgba(255,255,255,.4);cursor:pointer}
+html body .reviewViewerNav button.on{background:#fff}
+html body .reviewViewerClose{position:absolute;top:16px;right:16px;width:42px;height:42px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font:300 26px/1 var(--sans);cursor:pointer}
+
+/* ── SEPET: İNDİRİM KODU ── */
+html body .cx .cxCoupon{margin:2px 0 4px}
+html body .cx .cxCouponToggle{border:0;background:none;padding:2px 0;font:600 13px/1.4 var(--sans);color:var(--emerald-mid);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+html body .cx .cxCouponForm{display:flex;gap:8px}
+html body .cx .cxCouponForm input{flex:1;min-width:0;border:1px solid var(--border);border-radius:12px;padding:10px 12px;font:600 14px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;background:#fff;color:var(--text-main)}
+html body .cx .cxCouponForm input:focus{outline:2px solid var(--emerald-mid);outline-offset:1px}
+html body .cx .cxCouponForm button{border:0;border-radius:12px;padding:0 16px;background:var(--text-main);color:#fff;font:700 13px/1 var(--sans);cursor:pointer}
+html body .cx .cxCouponForm button:disabled{opacity:.45;cursor:default}
+html body .cx .cxCouponMsg{display:block;margin-top:6px;font:500 12px/1.35 var(--sans);font-style:normal;color:#a23a2a}
+html body .cx .cxDiscount{color:var(--emerald-mid)}
+html body .cx .cxDiscount b{font-weight:800;letter-spacing:.04em}
+html body .cx .cxCouponRemove{border:0;background:none;padding:0 0 0 8px;font:600 12px/1 var(--sans);color:var(--text-muted);text-decoration:underline;cursor:pointer}
+html body .trkDiscount{color:var(--emerald-mid);font-size:14px}
+html body .cx .cxDiscount span:last-child{white-space:nowrap;font-weight:700}
