@@ -9,11 +9,6 @@ import PRODUCT_SEED from '../../data/products.json'
 const A = '/assets/'
 const ENV: any = (import.meta as any).env || {}
 export const SITE_URL = ENV.VITE_SITE_URL || 'https://ravun-tau.vercel.app'
-
-// ── GÜVENLİ DEPOLAMA (site ile aynı anahtarlar / kodlama) ──
-function b64EncodeUtf8(str: string) {
-  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))))
-}
 function b64DecodeUtf8(str: string) {
   return decodeURIComponent(atob(str).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''))
 }
@@ -165,11 +160,6 @@ export function normalizeProductStatus(value: any, product: any = {}) {
   if (stock.includes('satildi')) return 'sold'
   return 'available'
 }
-export function productStatusInfo(product: any) {
-  const key = normalizeProductStatus(product?.status, product)
-  return { ...PRODUCT_STATUS.available, ...(PRODUCT_STATUS[key] || PRODUCT_STATUS.available), key }
-}
-
 // ── ÜRÜNLER ──
 export const INITIAL_PRODUCTS: any[] = PRODUCT_SEED as any[]
 export function normalizeProducts(value: any): any[] {

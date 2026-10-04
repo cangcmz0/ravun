@@ -224,4 +224,3 @@ npm run dev               # site + panel + API birlikte (Vite içinde)
   mesajlarıyla birlikte eklenecek.
 - KVKK: müşteri hesabı ad ve e-posta saklıyor; gizlilik/aydınlatma metni sitede
   henüz yok, eklenmeli.
-- Kök dizindeki `style.css` sitede kullanılmıyor (asıl dosya `src/style.css`).

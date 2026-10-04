@@ -143,15 +143,12 @@ function categoryLabelFromKey(key, fallback='') {
   };
   return labels[key] || fallback || key.split('-').map(x => x ? x[0].toLocaleUpperCase('tr-TR') + x.slice(1) : x).join(' ');
 }
-function sameCategory(a, b) {
-  if (categoryKey(b) === 'tum') return true;
-  return categoryKey(a) === categoryKey(b);
-}
+// Kategori sayfası metinleri: panelde düzenlenen (Site ayarları → Kategoriler) yoksa varsayılan.
 function categoryDetail(key, settings) {
   const normalized = categoryKey(key);
   const managed = settings?.categorySettings?.[normalized];
-  const fallback = CATEGORY_DETAILS[normalized] || CATEGORY_DETAILS.tum;
-  return {...fallback, ...(managed && typeof managed === 'object' ? managed : {})};
+  const fallback = CATEGORY_DETAILS[normalized] || { ...CATEGORY_DETAILS.tum, eyebrow: categoryLabelFromKey(normalized).toLocaleUpperCase('tr-TR'), title: categoryLabelFromKey(normalized), desc: '' };
+  return {...fallback, ...(managed && typeof managed === 'object' ? Object.fromEntries(Object.entries(managed).filter(([,v])=>v)) : {})};
 }
 /* ── V90–V94: ÜRÜN DURUMU, ARŞİV, HEDİYE, WHATSAPP VE BAKIM ── */
 const PRODUCT_STATUS = {
@@ -614,29 +611,6 @@ function normalizeCart(value, products = INITIAL_PRODUCTS, giftPrice = DEFAULT_S
    fiyatı sonradan değişince geçmiş siparişin tutarı da değişiyordu. Site her
    açıldığında bu sonucu geri yazdığı için admin panelindeki sipariş kayıtları
    bozuluyordu. Admin tarafındaki normalizeCartForOrder ile aynı kural. */
-function normalizeOrderItems(value) {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 200).filter(Boolean).map(item => ({
-    ...item,
-    title: cleanText(item?.title || '', 120),
-    price: safeNumber(item?.price, 0, 0, 10_000_000),
-    qty: safeNumber(item?.qty, 1, 1, 99),
-    image: safeImageSrc(item?.image, `${A}products_hero-1.webp`)
-  }));
-}
-function normalizeOrders(value) {
-  return Array.isArray(value) ? value.slice(0, 5000).filter(Boolean).map(o => ({
-    ...o,
-    id: o?.id ?? Date.now(),
-    orderNo: cleanText(o?.orderNo || `RVN-${Date.now()}`, 40),
-    status: cleanText(o?.status || 'pending', 40),
-    customerName: cleanText(o?.customerName || '', 90),
-    customerPhone: cleanText(o?.customerPhone || '', 30),
-    cargoCode: cleanText(o?.cargoCode || o?.trackingCode || '', 80),
-    note: cleanText(o?.note || '', 500),
-    items: normalizeOrderItems(o?.items || [])
-  })) : [];
-}
 const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim', favorites:'favoriler', track:'siparis-takip', account:'hesabim' };
 const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_SLUGS).map(([k,v])=>[v,k]));
 function pagePath(page, product) {
@@ -801,7 +775,6 @@ const IFilter=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" st
 const ITruck=()=><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>;
 const IZoom=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>;
 const IShare=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>;
-const IAdmin=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
 const IGoogle=()=><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>;
 const ICheck=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
 const IHand=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11V6.8a1.8 1.8 0 113.6 0V11"/><path d="M10.6 10V5.8a1.8 1.8 0 113.6 0V11"/><path d="M14.2 10.6V7.4a1.8 1.8 0 113.6 0v6.1c0 4.2-2.7 6.8-6.5 6.8H10c-2.1 0-3.8-.9-5-2.5l-2.1-2.9a1.9 1.9 0 013-2.3l1.1 1.2"/><path d="M7 15.2V11"/></svg>;
@@ -809,9 +782,7 @@ const ILeaf=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strok
 const IBox=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 3.7 7.5 12 12l8.3-4.5L12 3z"/><path d="M3.7 7.5V16.5L12 21l8.3-4.5v-9"/><path d="M12 12v9"/><path d="M8 5.2l8.3 4.5"/></svg>;
 const ICustom=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l2.4 5 5.4.8-3.9 3.8.9 5.4L12 15.5 7.2 18l.9-5.4-3.9-3.8 5.4-.8L12 3z"/><path d="M12 8.8v3.4l2.6 1.5"/></svg>;
 const ITrash=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>;
-const IEye=({open})=>open?<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>;
 const IThumbUp=()=><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/><path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>;
-const IImage=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
 const IChevron=({dir='right'})=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{transform:dir==='left'?'rotate(180deg)':dir==='up'?'rotate(-90deg)':dir==='down'?'rotate(90deg)':'none'}}><polyline points="9 18 15 12 9 6"/></svg>;
 const IStar=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 /* ── STAR RATING ── */
@@ -1605,6 +1576,8 @@ function Collection({add, standalone=false, goProduct, products, allReviews, fav
     return ()=>clearTimeout(t);
   },[filterKey, filtered.length]);
   const selectCategory=key=>{ setFilterKey(key); };
+  // Bir kategori seçiliyken başlık alanı o kategorinin panelde girilen metinlerini gösterir.
+  const catInfo=filterKey!=='tum'?categoryDetail(filterKey, settings):null;
   if(!standalone){
     /* Ana sayfadaki inline küçük koleksiyon */
     return (
@@ -1629,15 +1602,16 @@ function Collection({add, standalone=false, goProduct, products, allReviews, fav
       <div className="collGalleryHero">
         <div className="collGalleryHeroInner">
           <div className="collGalleryHeroLeft">
-            <p className="collGalleryEyebrow">{settings?.collectionEyebrow || 'KOLEKSİYON'}</p>
+            <p className="collGalleryEyebrow">{catInfo?catInfo.eyebrow:(settings?.collectionEyebrow || 'KOLEKSİYON')}</p>
             <h1 className="collGalleryTitle">
-              {(settings?.collectionTitle || 'Atölyeden çıkan\nher parça.').split('\n').map((line,i)=>
+              {catInfo?<em>{catInfo.title}</em>:(settings?.collectionTitle || 'Atölyeden çıkan\nher parça.').split('\n').map((line,i)=>
                 <React.Fragment key={i}>{i===1?<em>{line}</em>:line}{i===0&&<br/>}</React.Fragment>
               )}
             </h1>
           </div>
           <div className="collGalleryHeroRight">
-            <p className="collGallerySubtitle">{settings?.collectionDesc || 'Özel üretim, sipariş üzerine. Her biri tek.'}</p>
+            {catInfo?.image&&<img className="collCatImg" src={catInfo.image} alt="" loading="lazy"/>}
+            <p className="collGallerySubtitle">{catInfo?(catInfo.desc||settings?.collectionDesc||''):(settings?.collectionDesc || 'Özel üretim, sipariş üzerine. Her biri tek.')}</p>
             <div className="collGalleryCount"><strong>{filtered.length}</strong> parça</div>
           </div>
         </div>
@@ -1694,55 +1668,6 @@ function Collection({add, standalone=false, goProduct, products, allReviews, fav
       </div>
     </section>
   );
-}
-/* ── GEÇİCİ SİPARİŞ SİSTEMİ (VPS/DB ÖNCESİ LOCALSTORAGE) ── */
-const ORDER_STATUSES = [
-  ['pending','Beklemede'],
-  ['approved','Onaylandı'],
-  ['production','Üretimde'],
-  ['packing','Paketleniyor'],
-  ['cargo','Kargoda'],
-  ['delivered','Teslim edildi']
-];
-function makeOrderNo(){
-  const d=new Date();
-  const y=String(d.getFullYear()).slice(-2);
-  const m=String(d.getMonth()+1).padStart(2,'0');
-  const day=String(d.getDate()).padStart(2,'0');
-  const rand=Math.random().toString(36).slice(2,6).toUpperCase();
-  return `RVN-${y}${m}${day}-${rand}`;
-}
-function orderStatusLabel(status){
-  return ORDER_STATUSES.find(([k])=>k===status)?.[1] || 'Beklemede';
-}
-function orderTotal(order){
-  return (order.items||[]).reduce((s,x)=>s+(Number(x.price)||0)*(Number(x.qty)||1),0);
-}
-/* Yüklenen görseli localStorage kotasını korumak için sıkıştırır: max 2000px kenar, JPEG q=0.92 */
-function compressImageFile(file, {maxDim = 2000, quality = 0.92} = {}) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Dosya okunamadı'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Görsel işlenemedi'));
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
 }
 function Process(){
   return (
