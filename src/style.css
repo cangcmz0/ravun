@@ -12217,8 +12217,8 @@ html body .nfBox > div .nfGhost,html body .nfBox > div a{background:transparent;
    CEVİZ & ZÜMRÜT — Ravun görsel kimliği
    Üç ana renk: ceviz (koyu kahve), zümrüt epoksi (yeşil), krem.
    Mercan yalnızca sipariş/iletişim çağrılarında kalır.
-   İmza öğeler: epoksi şeridi (marquee), dalgalı reçine geçişli footer,
-   başlıklarda reçine parıltılı italik vurgu, ceviz damarı dokusu.
+   İmza öğeler: epoksi şeridi (marquee), başlıklarda reçine parıltılı
+   italik vurgu, koyu ceviz footer.
    Bu blok dosyanın sonunda durmalı.
    ══════════════════════════════════════════════════════════════════ */
 :root{
@@ -12297,18 +12297,9 @@ html body .marquee .marqueeSep{color:var(--emerald-light) !important;opacity:.85
 @keyframes resinFlow{from{background-position:0% 50%,100% 50%,0 0}to{background-position:100% 50%,0% 50%,0 0}}
 @media (prefers-reduced-motion:reduce){html body .marquee{animation:none}}
 
-/* — Footer: ceviz damarı dokusu ve üstte dalgalı reçine geçişi — */
+/* — Footer: sade koyu ceviz (desen/çizgi yok) — */
 html body .footer{
-  position:relative !important;
-  margin-top:64px !important;
-  background:
-    repeating-linear-gradient(94deg,rgba(255,230,190,.035) 0 2px,transparent 2px 9px),
-    repeating-linear-gradient(86deg,rgba(0,0,0,.08) 0 1px,transparent 1px 14px),
-    linear-gradient(180deg,#2E1F12,#241709) !important;
-}
-html body .footer::before{
-  content:"";position:absolute;left:0;right:0;top:-46px;height:48px;pointer-events:none;
-  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 48' preserveAspectRatio='none'%3E%3Cdefs%3E%3ClinearGradient id='r' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%230E5A47'/%3E%3Cstop offset='.45' stop-color='%232E9F80'/%3E%3Cstop offset='.7' stop-color='%231B7A61'/%3E%3Cstop offset='1' stop-color='%230B4A3B'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M0 30 C180 10 330 40 520 26 S860 6 1040 24 1300 38 1440 18 V48 H0Z' fill='%232E1F12'/%3E%3Cpath d='M0 30 C180 10 330 40 520 26 S860 6 1040 24 1300 38 1440 18' fill='none' stroke='url(%23r)' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E") center bottom/100% 100% no-repeat;
+  background:linear-gradient(180deg,#2E1F12,#231709) !important;
 }
 
 /* — Sıra dışı parça bandı: reçine içinde ışık hareleri — */

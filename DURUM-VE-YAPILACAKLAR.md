@@ -121,8 +121,7 @@ yorumlar bir kez yüklenir.
   "Sipariş Ver", "İletişime Geç" ve favori kalbinde.
 - Üst etiketler zümrüt ve başında ince reçine çizgisi; başlıklardaki italik vurgular
   reçine parıltılı zümrüt; yıldızlar bal rengi.
-- Kayan yazı bandı akan zümrüt epoksi şeridi; footer ceviz damarı dokulu ve üstte
-  dalgalı reçine geçişli.
+- Kayan yazı bandı akan zümrüt epoksi şeridi; footer sade koyu ceviz.
 - Hepsi `src/style.css` sonundaki "CEVİZ & ZÜMRÜT" bloğunda; geri almak için o blok
   silinebilir.
 
