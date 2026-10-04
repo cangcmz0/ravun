@@ -1,4 +1,5 @@
 import {
+  BellRing,
   LayoutDashboard,
   Mail,
   Package,
@@ -59,6 +60,11 @@ export const sidebarData: SidebarData = {
           title: 'Site ayarları',
           url: '/settings',
           icon: Settings,
+        },
+        {
+          title: 'Bildirimler',
+          url: '/notifications',
+          icon: BellRing,
         },
       ],
     },

@@ -12,6 +12,10 @@ import {
   cleanText, safeNumber, sanitizeProduct, sanitizeSettings, sanitizeReviewInput,
   sanitizeContactInput, ORDER_STATUS_KEYS,
 } from './sanitize.js'
+import {
+  loadNotify, saveNotify, sanitizeNotify, publicNotify, sendTelegram, detectChats,
+  notifyEvent, orderMessage, reviewMessage, contactMessage, siteOrigin,
+} from './notify.js'
 
 const json = (status, body, headers = {}) => ({ status, headers, body })
 const fail = (status, error, extra = {}) => json(status, { error, ...extra })
@@ -98,7 +102,7 @@ async function createOrder(req) {
   const body = req.body || {}
   const items = Array.isArray(body.items) ? body.items.slice(0, 50) : []
   if (!items.length) return fail(400, 'Sepet boş.')
-  return tx(async (client) => {
+  const result = await tx(async (client) => {
     const ids = [...new Set(items.map((i) => Math.round(Number(i?.baseId ?? i?.id))).filter(Number.isFinite))]
     const { rows } = await client.query('SELECT id, data FROM products WHERE id = ANY($1::int[])', [ids])
     const byId = new Map(rows.map((r) => [r.id, r.data]))
@@ -139,6 +143,7 @@ async function createOrder(req) {
       note: cleanText(body.note, 500),
       cargoCode: '',
       source: 'site',
+      history: [{ status: 'pending', at: new Date().toISOString() }],
     }
     let orderNo = makeOrderNo()
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -151,6 +156,60 @@ async function createOrder(req) {
     }
     return fail(500, 'Sipariş numarası üretilemedi.')
   })
+  // Bildirim, sipariş kesin olarak kaydedildikten sonra gönderilir.
+  if (result.status === 201) await notifyEvent(await db(), 'orders', orderMessage(result.body.order, siteOrigin(req)))
+  return result
+}
+
+// ── SİPARİŞ TAKİBİ (müşteri) ──
+// Sipariş numarası + siparişte verilen telefonun son 4 hanesi ile sorgulanır.
+// Müşterinin adı/telefonu/notu gibi kişisel bilgiler yanıtta yer almaz.
+const compactNo = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+
+async function trackOrder(req) {
+  const rl = await rateLimit(`track:${req.ip}`, 20, 10 * 60 * 1000)
+  if (!rl.ok) return fail(429, 'Çok fazla sorgu yapıldı. Lütfen biraz sonra tekrar deneyin.', { retryAfter: rl.retryAfter })
+  const no = compactNo(req.body?.orderNo).slice(0, 40)
+  const phone = String(req.body?.phone || '').replace(/\D/g, '')
+  if (no.length < 6 || phone.length < 4) return fail(400, 'Sipariş numarasını ve telefonunuzun son 4 hanesini yazın.')
+  const p = await db()
+  const { rows } = await p.query(
+    "SELECT * FROM orders WHERE regexp_replace(upper(order_no), '[^A-Z0-9]', '', 'g') = $1 LIMIT 1",
+    [no],
+  )
+  const row = rows[0]
+  const stored = String(row?.data?.customerPhone || '').replace(/\D/g, '')
+  if (!row || stored.length < 4 || stored.slice(-4) !== phone.slice(-4)) {
+    return fail(404, 'Bu bilgilerle eşleşen sipariş bulunamadı. Sipariş numarasını ve telefonu kontrol edin.')
+  }
+  const o = orderRow(row)
+  const cfg = await loadNotify(p)
+  const code = o.cargoCode || ''
+  const tpl = cfg.cargoTrackUrl || ''
+  return json(200, {
+    order: {
+      orderNo: o.orderNo,
+      status: o.status,
+      createdAt: o.createdAt,
+      updatedAt: o.updatedAt,
+      history: Array.isArray(o.history) ? o.history.slice(-30) : [],
+      firstName: String(o.customerName || '').trim().split(/\s+/)[0] || '',
+      total: o.total,
+      cargoCode: code,
+      cargoCompany: code ? cfg.cargoCompany || '' : '',
+      cargoTrackUrl: code && tpl ? tpl.replace(/\{kod\}/g, encodeURIComponent(code)) : '',
+      items: (o.items || []).map((it) => ({
+        baseId: it.baseId,
+        title: it.title,
+        qty: it.qty,
+        price: it.price,
+        image: it.image,
+        selectedSize: it.selectedSize,
+        selectedColor: it.selectedColor,
+        giftWrap: Boolean(it.giftWrap),
+      })),
+    },
+  }, NO_STORE)
 }
 
 async function createReview(req) {
@@ -160,9 +219,10 @@ async function createReview(req) {
   const rl = await rateLimit(`review:${req.ip}`, 5, 60 * 60 * 1000)
   if (!rl.ok) return fail(429, 'Çok fazla yorum gönderildi. Lütfen daha sonra tekrar deneyin.', { retryAfter: rl.retryAfter })
   const p = await db()
-  const exists = await p.query('SELECT 1 FROM products WHERE id = $1', [productId])
+  const exists = await p.query("SELECT data->>'title' AS title FROM products WHERE id = $1", [productId])
   if (!exists.rowCount) return fail(404, 'Ürün bulunamadı.')
   await p.query('INSERT INTO reviews (product_id, name, rating, text, approved) VALUES ($1,$2,$3,$4,false)', [productId, name, rating, text])
+  await notifyEvent(p, 'reviews', reviewMessage({ productId, name, rating, text }, exists.rows[0].title, siteOrigin(req)))
   return json(201, { ok: true, pending: true })
 }
 
@@ -183,6 +243,7 @@ async function createMessage(req) {
   if (!rl.ok) return fail(429, 'Çok fazla mesaj gönderildi. Lütfen daha sonra tekrar deneyin.', { retryAfter: rl.retryAfter })
   const p = await db()
   await p.query('INSERT INTO messages (data) VALUES ($1)', [msg])
+  await notifyEvent(p, 'messages', contactMessage(msg, siteOrigin(req)))
   return json(201, { ok: true })
 }
 
@@ -291,8 +352,15 @@ async function adminRoute(req, seg) {
       const patch = {}
       if (b.cargoCode !== undefined) patch.cargoCode = cleanText(b.cargoCode, 80)
       if (b.note !== undefined) patch.note = cleanText(b.note, 500)
+      // Durum değiştiyse müşterinin takip sayfasında görünen geçmişe eklenir.
       const { rows } = await p.query(
-        `UPDATE orders SET status = COALESCE($2, status), data = data || $3::jsonb, updated_at = now()
+        `UPDATE orders SET
+           data = CASE WHEN $2::text IS NOT NULL AND $2::text <> status
+             THEN jsonb_set(data || $3::jsonb, '{history}',
+               COALESCE(data->'history', '[]'::jsonb) || jsonb_build_array(jsonb_build_object('status', $2::text, 'at', now())))
+             ELSE data || $3::jsonb END,
+           status = COALESCE($2, status),
+           updated_at = now()
          WHERE id = $1 RETURNING *`,
         [oid, status ?? null, patch],
       )
@@ -336,6 +404,24 @@ async function adminRoute(req, seg) {
     }
     if (m === 'DELETE') {
       await p.query('DELETE FROM messages WHERE id = $1', [mid])
+      return json(200, { ok: true }, NO_STORE)
+    }
+  }
+
+  if (resource === 'notify') {
+    const cfg = await loadNotify(p)
+    if (m === 'GET' && !id) return json(200, { notify: publicNotify(cfg) }, NO_STORE)
+    if (m === 'PUT' && !id) {
+      const next = sanitizeNotify(req.body?.notify, cfg)
+      await saveNotify(p, next)
+      return json(200, { notify: publicNotify(next) }, NO_STORE)
+    }
+    if (m === 'POST' && id === 'detect') {
+      const chats = await detectChats(cfg, typeof req.body?.token === 'string' ? req.body.token : '')
+      return json(200, { chats }, NO_STORE)
+    }
+    if (m === 'POST' && id === 'test') {
+      await sendTelegram(cfg, '✅ <b>Ravun bildirimleri çalışıyor.</b>\nYeni sipariş, yorum ve mesajlar buraya gelecek.')
       return json(200, { ok: true }, NO_STORE)
     }
   }
@@ -448,6 +534,7 @@ export async function route(req) {
     }
     if (seg[0] === 'catalog' && m === 'GET') return await getCatalog()
     if (seg[0] === 'orders' && m === 'POST' && seg.length === 1) return await createOrder(req)
+    if (seg[0] === 'orders' && seg[1] === 'track' && m === 'POST') return await trackOrder(req)
     if (seg[0] === 'reviews' && m === 'POST' && seg.length === 1) return await createReview(req)
     if (seg[0] === 'reviews' && seg[2] === 'helpful' && m === 'POST') return await markHelpful(req, seg[1])
     if (seg[0] === 'messages' && m === 'POST' && seg.length === 1) return await createMessage(req)

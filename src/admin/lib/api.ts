@@ -143,6 +143,33 @@ export async function deleteMessage(id: number) {
   await request(`/admin/messages/${id}`, 'DELETE')
 }
 
+// ── BİLDİRİMLER (Telegram) VE SİPARİŞ MESAJ AYARLARI ──
+export type NotifySettings = {
+  hasToken: boolean
+  tokenHint: string
+  tokenFromEnv: boolean
+  telegramChatId: string
+  events: { orders: boolean; reviews: boolean; messages: boolean }
+  paymentInfo: string
+  cargoCompany: string
+  cargoTrackUrl: string
+}
+export async function fetchNotify() {
+  const { notify } = await request<{ notify: NotifySettings }>('/admin/notify')
+  return notify
+}
+export async function saveNotify(patch: Partial<NotifySettings> & { telegramToken?: string }) {
+  const { notify } = await request<{ notify: NotifySettings }>('/admin/notify', 'PUT', { notify: patch })
+  return notify
+}
+export async function detectTelegramChats(token?: string) {
+  const { chats } = await request<{ chats: { id: string; name: string; type: string }[] }>('/admin/notify/detect', 'POST', { token: token || '' })
+  return chats
+}
+export async function testTelegram() {
+  await request('/admin/notify/test', 'POST', {})
+}
+
 // ── ESKİ TARAYICI VERİSİNİ SUNUCUYA AKTARMA ──
 export async function importLegacy(payload: { products?: any[]; settings?: any; orders?: any[]; reviews?: any }) {
   const prepared = await uploadInlineImages({

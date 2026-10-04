@@ -35,12 +35,12 @@ yorumlar bir kez yüklenir.
 | Son katalog | Tarayıcı önbelleği (hızlı açılış için; her açılışta sunucudan yenilenir) |
 
 ### API uçları
-- Herkese açık: `GET /api/catalog`, `POST /api/orders`, `POST /api/reviews`,
-  `POST /api/reviews/:id/helpful`, `POST /api/messages`, `GET /api/images/:id`,
-  `GET /api/health`
+- Herkese açık: `GET /api/catalog`, `POST /api/orders`, `POST /api/orders/track`,
+  `POST /api/reviews`, `POST /api/reviews/:id/helpful`, `POST /api/messages`,
+  `GET /api/images/:id`, `GET /api/health`
 - Admin (oturum çerezi + `X-Ravun-Admin: 1` başlığı gerekir):
   `/api/admin/login|logout|session`, `products`, `settings`, `orders/:id`,
-  `reviews/:id`, `messages/:id`, `images`, `import`
+  `reviews/:id`, `messages/:id`, `images`, `import`, `notify` (+ `notify/detect`, `notify/test`)
 
 ### Güvenlik
 - PIN artık tarayıcı koduna gömülmüyor; yalnızca sunucu ortam değişkeninde.
@@ -50,6 +50,24 @@ yorumlar bir kez yüklenir.
 - Sipariş fiyatları sunucuda güncel katalogdan hesaplanır; tarayıcıda
   değiştirilen fiyat siparişe yansımaz.
 - Müşteri yorumları onaylanana kadar yayınlanmaz (Panel → Yorumlar).
+
+## Sipariş yönetimi
+- **Telegram bildirimi:** Panel → Bildirimler. @BotFather ile bot oluşturup token'ı
+  yapıştırın, bota "merhaba" yazın, "Sohbeti bul" → Kaydet → "Deneme mesajı gönder".
+  Yeni sipariş, yorum ve mesajlar anında Telegram'a düşer (her biri ayrı açılıp
+  kapatılabilir). Token veritabanında saklanır, sitede/katalogda asla görünmez.
+  Telegram'a ulaşılamazsa sipariş yine kaydedilir.
+- **Hazır WhatsApp mesajları:** Sipariş detayında duruma göre şablon (sipariş alındı,
+  ödeme bilgisi, onaylandı, üretimde, paketleniyor, kargoya verildi, teslim edildi,
+  iptal). Mesaj düzenlenebilir; "Kaydet ve WhatsApp'ta gönder" hem durumu kaydeder
+  hem mesajı açar. Kargo firması, takip adresi ve ödeme bilgisi Bildirimler
+  sayfasından girilir.
+- **Müşteri sipariş takibi:** `/siparis-takip` — sipariş numarası + telefonun son
+  4 hanesiyle durum, adım adım geçmiş, kargo kodu ve kargo takip linki. Siparişi
+  veren cihaz siparişi hatırlar (sepet sonrası "Siparişimi takip et" tek dokunuş).
+  Müşterinin adı soyadı/telefonu/notu yanıtta yer almaz; IP başına sorgu sınırı var.
+- **Yazdırma:** Sipariş listesinde ve detayında yazıcı simgesi → sipariş fişi
+  (ürünler, hediye notları, toplam, not, paketleme kontrol kutuları).
 
 ## Vercel kurulumu (bir kez)
 
@@ -111,6 +129,7 @@ npm run dev               # site + panel + API birlikte (Vite içinde)
 - `scripts/prerender.mjs` SEO önizleme sayfalarını hâlâ `src/data/products.json`'dan
   üretiyor. Panelden eklenen yeni ürünler normal çalışır ama paylaşım
   önizlemesi (og:image vb.) genel site bilgisini gösterir.
-- Sipariş durumu değişince müşteriye otomatik bildirim (e-posta/WhatsApp) yok.
+- Sipariş durumu değişince müşteriye mesaj otomatik gitmiyor; panelde hazır
+  WhatsApp mesajı tek tıkla gönderiliyor (WhatsApp Business API ücretli olduğu için).
 - Online ödeme yok; ödeme WhatsApp üzerinden konuşuluyor.
 - Kök dizindeki `style.css` sitede kullanılmıyor (asıl dosya `src/style.css`).

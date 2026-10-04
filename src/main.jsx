@@ -603,7 +603,7 @@ function normalizeOrders(value) {
     items: normalizeOrderItems(o?.items || [])
   })) : [];
 }
-const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim', favorites:'favoriler' };
+const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim', favorites:'favoriler', track:'siparis-takip' };
 const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_SLUGS).map(([k,v])=>[v,k]));
 function pagePath(page, product) {
   if (page === 'product' && product) return `/urun/${product.id}`;
@@ -624,6 +624,7 @@ function metaDescriptionFor(page, product) {
   if (page === 'story') return 'Ravun atölyesinin ahşap, epoksi ve el işçiliği hikayesi.';
   if (page === 'contact') return 'Ravun ile özel sipariş, teklif ve atölye iletişimi.';
   if (page === 'favorites') return 'Ravun favori parçalarınız ve kaydettiğiniz özel üretim tasarımlar.';
+  if (page === 'track') return 'Ravun siparişinizin durumunu sipariş numaranız ve telefonunuzla takip edin.';
   return 'Ravun — ahşap, epoksi ve el yapımı premium tasarım atölyesi.';
 }
 function structuredDataFor(page, product) {
@@ -707,6 +708,7 @@ function updateMeta(page, product) {
     : page === 'story' ? 'Hikaye | Ravun'
     : page === 'contact' ? 'İletişim | Ravun'
     : page === 'favorites' ? 'Favoriler | Ravun'
+    : page === 'track' ? 'Sipariş Takibi | Ravun'
     : 'Ravun | Ahşap & Epoksi Atölyesi';
   const description = metaDescriptionFor(page, product);
   const url = absoluteUrl(pagePath(page, product));
@@ -1974,6 +1976,7 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
             <p>Siparişiniz atölyeye ulaştı. Ödeme ve teslim detayları için en kısa sürede sizinle iletişime geçeceğiz.</p>
             <div className="cxOrderNo"><small>Sipariş no</small><b>{created.orderNo}</b></div>
             <a className="cxBtn cxBtnWa" href={waUrl(created)} target="_blank" rel="noreferrer"><IWA/> WhatsApp'tan yazın</a>
+            <button className="cxBtn" onClick={()=>{close();go?.('track');}}>Siparişimi takip et</button>
             <button className="cxBtn cxBtnGhost" onClick={()=>{close();go?.('collection');}}>Alışverişe devam et</button>
           </div>
         ) : cart.length===0 ? (
@@ -2116,6 +2119,118 @@ function FavoritesPage({products, favorites, add, goProduct, allReviews, toggleF
     </main>
   );
 }
+/* ── SİPARİŞ TAKİBİ ── */
+// Müşteri, sipariş numarası + telefonunun son 4 hanesiyle siparişinin durumunu görür.
+// Bu cihazdan verilen siparişler hatırlanır; tek dokunuşla sorgulanabilir.
+const MY_ORDERS_KEY='ravun:myOrders';
+function rememberMyOrder(orderNo, phone){
+  const last4=String(phone||'').replace(/\D/g,'').slice(-4);
+  if(!orderNo||last4.length<4)return;
+  const list=(Array.isArray(readStored(MY_ORDERS_KEY,[]))?readStored(MY_ORDERS_KEY,[]):[]).filter(x=>x&&x.orderNo!==orderNo);
+  writeStored(MY_ORDERS_KEY,[{orderNo,last4,at:new Date().toISOString()},...list].slice(0,6));
+}
+const TRACK_STEPS=[
+  ['pending','Sipariş alındı','Siparişiniz atölyeye ulaştı.'],
+  ['approved','Onaylandı','Ödeme ve detaylar netleşti.'],
+  ['production','Üretimde','Parçanız atölyede elde hazırlanıyor.'],
+  ['packing','Paketleniyor','Özenle paketleniyor.'],
+  ['cargo','Kargoda','Kargo firmasına teslim edildi.'],
+  ['delivered','Teslim edildi','Parçanız size ulaştı.'],
+];
+function trackDate(v){
+  const d=new Date(v);
+  return Number.isFinite(d.getTime())?d.toLocaleString('tr-TR',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'}):'';
+}
+function TrackPage({go}){
+  const mine=useMemo(()=>{const l=readStored(MY_ORDERS_KEY,[]);return Array.isArray(l)?l.filter(x=>x&&x.orderNo):[];},[]);
+  const initialNo=useMemo(()=>{try{return cleanText(new URLSearchParams(window.location.search).get('no')||'',40);}catch{return '';}},[]);
+  const [no,setNo]=useState(initialNo||mine[0]?.orderNo||'');
+  const [phone,setPhone]=useState(()=>{const m=mine.find(x=>x.orderNo===(initialNo||mine[0]?.orderNo));return m?.last4||'';});
+  const [order,setOrder]=useState(null);
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const [copied,setCopied]=useState(false);
+  const query=async(orderNo=no,ph=phone)=>{
+    if(busy)return;
+    const digits=String(ph||'').replace(/\D/g,'');
+    if(!orderNo.trim()||digits.length<4){setError('Sipariş numaranızı ve telefonunuzun son 4 hanesini yazın.');return;}
+    setBusy(true);setError('');
+    try{
+      const {order}=await apiPost('/orders/track',{orderNo:orderNo.trim(),phone:digits});
+      setOrder(order);
+      rememberMyOrder(order.orderNo,digits);
+      try{window.history.replaceState(window.history.state,'',`/siparis-takip?no=${encodeURIComponent(order.orderNo)}`);}catch{}
+    }catch(err){setOrder(null);setError(err.message||'Sipariş bulunamadı.');}
+    finally{setBusy(false);}
+  };
+  // Bu cihazda kayıtlı bir sipariş ise sayfa açılır açılmaz göster.
+  useEffect(()=>{ if(no&&String(phone).length>=4) query(); },[]);
+  const cancelled=order?.status==='cancelled';
+  const current=order?Math.max(0,TRACK_STEPS.findIndex(([k])=>k===order.status)):-1;
+  const whenOf=key=>{
+    const h=[...(order?.history||[])].reverse().find(x=>x?.status===key);
+    if(h)return trackDate(h.at);
+    return key==='pending'?trackDate(order?.createdAt):'';
+  };
+  const copyCode=()=>{try{navigator.clipboard?.writeText(order.cargoCode);setCopied(true);setTimeout(()=>setCopied(false),1600);}catch{}};
+  const waHelp=order?`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(`Merhaba, ${order.orderNo} numaralı siparişim hakkında yazıyorum.`)}`:`https://wa.me/${WA_NUMBER}`;
+  return (
+    <main className="page trackPage">
+      <section className="favoritesHero trackHero reveal"><p>SİPARİŞ TAKİBİ</p><h1>Siparişin<br/><em>nerede?</em></h1><span>Sipariş numaranız ve siparişte verdiğiniz telefonun son 4 hanesiyle durumunu anında görün.</span></section>
+      <section className="trkBody">
+        <form className="trkForm" onSubmit={e=>{e.preventDefault();query();}}>
+          <label><span>Sipariş numarası</span><input value={no} onChange={e=>setNo(e.target.value)} placeholder="RVN-251003-AB12CD" autoComplete="off" autoCapitalize="characters" spellCheck={false}/></label>
+          <label><span>Telefonun son 4 hanesi</span><input value={phone} onChange={e=>setPhone(e.target.value.replace(/[^\d\s+]/g,''))} placeholder="örn. 4967" inputMode="numeric" autoComplete="off" maxLength={18}/></label>
+          <button type="submit" disabled={busy}>{busy?'Sorgulanıyor…':'Siparişi göster'}</button>
+          {mine.length>0&&<div className="trkMine"><small>Bu cihazdaki siparişleriniz:</small>{mine.map(m=><button type="button" key={m.orderNo} className={order?.orderNo===m.orderNo?'on':''} onClick={()=>{setNo(m.orderNo);setPhone(m.last4);query(m.orderNo,m.last4);}}>{m.orderNo}</button>)}</div>}
+          {error&&<p className="trkError" role="alert">{error}</p>}
+        </form>
+        {order&&(
+          <article className="trkResult" aria-live="polite">
+            <header className="trkHead">
+              <div><small>Sipariş no</small><b>{order.orderNo}</b><span>{trackDate(order.createdAt)}</span></div>
+              <strong className={`trkBadge ${cancelled?'off':order.status==='delivered'?'done':''}`}>{cancelled?'İptal edildi':TRACK_STEPS[current]?.[1]}</strong>
+            </header>
+            {order.firstName&&<p className="trkHello">Merhaba {order.firstName}, {cancelled?'bu sipariş iptal edildi. Bir sorunuz varsa bize yazabilirsiniz.':order.status==='delivered'?'parçanız size ulaştı. Keyifle kullanın!':'siparişiniz özenle hazırlanıyor.'}</p>}
+            {!cancelled&&(
+              <ol className="trkSteps">
+                {TRACK_STEPS.map(([key,label,desc],i)=>(
+                  <li key={key} className={i<current?'past':i===current?'now':''}>
+                    <i aria-hidden="true">{i<=current?<ICheck/>:i+1}</i>
+                    <div><b>{label}</b><small>{i<=current?(whenOf(key)||desc):desc}</small></div>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {order.cargoCode&&(
+              <div className="trkCargo">
+                <div><small>{order.cargoCompany||'Kargo'} takip kodu</small><b>{order.cargoCode}</b></div>
+                <div className="trkCargoActions">
+                  <button type="button" onClick={copyCode}>{copied?'Kopyalandı ✓':'Kopyala'}</button>
+                  {order.cargoTrackUrl&&<a href={order.cargoTrackUrl} target="_blank" rel="noreferrer">Kargoyu takip et ↗</a>}
+                </div>
+              </div>
+            )}
+            <ul className="trkItems">
+              {(order.items||[]).map((it,i)=>(
+                <li key={i}>
+                  <img src={it.image||`${A}products_hero-1.webp`} alt="" loading="lazy"/>
+                  <div><b>{it.title}</b><small>{[it.selectedSize,it.selectedColor].filter(Boolean).join(' · ')}{it.giftWrap?' · Hediye paketi':''}</small></div>
+                  <span>{it.qty} × {money(it.price)}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="trkTotal"><span>Toplam</span><b>{money(order.total||0)}</b></div>
+            <div className="trkHelp">
+              <a href={waHelp} target="_blank" rel="noreferrer"><IWA/> Sorunuz mu var? WhatsApp'tan yazın</a>
+              <button type="button" onClick={()=>go('collection')}>Koleksiyona dön</button>
+            </div>
+          </article>
+        )}
+      </section>
+    </main>
+  );
+}
 /* ── MOBİL ALT MENÜ ── */
 function BottomNav({page, go, onSearch, onCart, favCount, cartCount}){
   const waText=encodeURIComponent('Merhaba, Ravun sitesinden yazıyorum. Ürün/sipariş hakkında bilgi almak istiyorum.');
@@ -2157,7 +2272,7 @@ function Footer({go, settings, onAdmin}){
   return (
     <footer className="footer">
       <div><img src={`${A}ravun-logo.webp`} alt="Ravun" loading="lazy" width="120" height="32"/><p>{settings?.footerDesc || 'Doğal ahşap ve epoksi reçineyi el işçiliğiyle buluşturan butik atölye.'}</p><span>{settings?.footerLocation || "Beykoz, İstanbul · 2018'den beri"}</span></div>
-      <nav><b>Atölye</b><button onClick={()=>go('collection')}>Koleksiyon</button><button onClick={()=>go('story')}>Hikayemiz</button><button onClick={()=>go('contact')}>Sipariş</button></nav>
+      <nav><b>Atölye</b><button onClick={()=>go('collection')}>Koleksiyon</button><button onClick={()=>go('story')}>Hikayemiz</button><button onClick={()=>go('contact')}>Sipariş</button><button onClick={()=>go('track')}>Sipariş takibi</button></nav>
       <nav><b>Sosyal</b><a href={safeUrl(settings?.instagramUrl || 'https://instagram.com/ravun.atolye', 'https://instagram.com/')} target="_blank" rel="noreferrer">{settings?.instagram || '@ravun.atolye'}</a><span className="footerSoon">{settings?.pinterestLabel || 'Pinterest — yakında'}</span></nav>
       <nav><b>İletişim</b><a href={`mailto:${WA_EMAIL}`}>{WA_EMAIL}</a><a href={`https://wa.me/${WA_NUMBER}`} target="_blank" rel="noreferrer">{WA_DISPLAY}</a></nav>
       <small onClick={handleSecretTap} style={{userSelect:'none'}}>© 2026 Ravun Atölye · Tüm hakları saklıdır.</small>
@@ -2667,6 +2782,7 @@ function App(){
       customerPhone:customer.customerPhone||'',
       note:customer.note||''
     });
+    rememberMyOrder(order.orderNo, customer.customerPhone);
     if(toastTimer.current)clearTimeout(toastTimer.current);
     setToast(`${order.orderNo} siparişiniz alındı`);
     toastTimer.current=setTimeout(()=>setToast(''),2600);
@@ -2681,6 +2797,7 @@ function App(){
       {page==='collection'&&<main className="page"><Collection add={add} standalone goProduct={goProduct} products={products} allReviews={allReviews} favorites={favorites} toggleFav={toggleFav} cart={cart} onCart={()=>setDrawer(true)} settings={siteSettings}/></main>}
       {page==='story'&&<StoryPage go={go}/>}
       {page==='contact'&&<ContactPage settings={siteSettings}/>}
+      {page==='track'&&<TrackPage go={go}/>}
       {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go}/>}
       {page==='product'&&!currentProduct&&<main className="page productDetailPage"><p className="pageLoading">Ürün yükleniyor…</p></main>}
       {page==='product'&&currentProduct&&<ProductDetailPage product={currentProduct} go={go} add={add} allReviews={allReviews} setAllReviews={setAllReviews} favorites={favorites} toggleFav={toggleFav} products={products} recentIds={recentIds} settings={siteSettings}/>}
@@ -2709,14 +2826,16 @@ const rootEl = document.getElementById('root');
 if (window.location.pathname.startsWith('/admin')) {
   // Sitenin stil dosyası (style.css) bu giriş dosyasında statik olarak yüklendiği
   // için /admin'de de sayfaya ekleniyordu ve !important kuralları panele sızıyordu
-  // (ör. görsel boyutları). Panel açılmadan önce site stilini kaldırıyoruz:
+  // (ör. görsel boyutları). Panel açılmadan önce site stilini devre dışı bırakıyoruz:
   //   üretimde: <link href="/assets/index-….css">, geliştirmede: <style data-vite-dev-id="…/src/style.css">
-  // Vite, panel kodunu yüklerken ortak parçaların stilini yeniden ekleyebildiği
-  // için sonradan eklenenler de bir gözlemciyle kaldırılır.
+  // Öğe SİLİNMEZ, yalnızca media="not all" ile etkisizleştirilir: silinirse Vite
+  // panel kodunu yüklerken aynı dosyayı yeniden ekleyip yüklenmesini bekliyor ve
+  // önbellek yoksa bu bekleme hiç bitmeyip panel boş ekranda kalabiliyordu.
+  // Sonradan eklenenler de bir gözlemciyle etkisizleştirilir.
   const SITE_CSS = 'link[rel="stylesheet"][href*="/assets/index-"], style[data-vite-dev-id$="/src/style.css"]';
-  const dropSiteCss = () => document.querySelectorAll(SITE_CSS).forEach(el => el.remove());
-  dropSiteCss();
-  new MutationObserver(dropSiteCss).observe(document.head, { childList: true });
+  const muteSiteCss = () => document.querySelectorAll(SITE_CSS).forEach(el => { if (el.media !== 'not all') el.media = 'not all'; });
+  muteSiteCss();
+  new MutationObserver(muteSiteCss).observe(document.head, { childList: true });
   import('./admin/main.tsx')
     .then(({ mountAdminApp }) => mountAdminApp(rootEl))
     .catch(err => {
