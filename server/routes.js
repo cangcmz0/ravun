@@ -21,6 +21,7 @@ import {
   loadNotify, saveNotify, sanitizeNotify, publicNotify, sendTelegram, detectChats,
   notifyEvent, orderMessage, reviewMessage, contactMessage, siteOrigin,
 } from './notify.js'
+import { couponCode, sanitizeCoupons, loadCoupons, saveCoupons, applyCoupon, couponLabel } from './coupons.js'
 
 const json = (status, body, headers = {}) => ({ status, headers, body })
 const fail = (status, error, extra = {}) => json(status, { error, ...extra })
@@ -46,7 +47,14 @@ function reviewRow(r) {
     createdAt: r.created_at,
     reply: r.reply || '',
     replyAt: r.reply_at || null,
+    photos: reviewPhotos(r.photos),
   }
+}
+
+// Yorum fotoğrafları yalnızca sitenin kendi görsel adresleri olabilir.
+const IMAGE_PATH = /^\/api\/images\/[a-f0-9]{24}\.(webp|jpg|png|gif)$/
+function reviewPhotos(v) {
+  return (Array.isArray(v) ? v : []).filter((u) => typeof u === 'string' && IMAGE_PATH.test(u)).slice(0, 3)
 }
 
 function groupReviews(rows) {
@@ -164,7 +172,19 @@ async function createOrder(req) {
       })
     }
     if (!lines.length) return fail(409, 'Sepetteki ürünler artık satışta değil.')
-    const total = lines.reduce((s, l) => s + l.price * l.qty, 0)
+    const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0)
+    // Kupon: aynı işlemde doğrulanır ve kullanım sayısı artırılır.
+    let discount = 0
+    let coupon = ''
+    if (couponCode(body.couponCode)) {
+      const list = await loadCoupons(client, { lock: true })
+      const applied = applyCoupon(list, body.couponCode, subtotal)
+      if (!applied.ok) return fail(409, applied.error, { field: 'coupon' })
+      discount = applied.discount
+      coupon = applied.coupon.code
+      await saveCoupons(client, list.map((c) => (c.code === coupon ? { ...c, used: (c.used || 0) + 1 } : c)))
+    }
+    const total = subtotal - discount
     // Giriş yapmış müşterinin siparişi hesabına bağlanır ("Hesabım → Siparişlerim").
     const cust = await loadCustomer(client, await customerId(req))
     if (cust && !cust.phone && cleanText(body.customerPhone, 30)) {
@@ -173,6 +193,7 @@ async function createOrder(req) {
     const data = {
       items: lines,
       total,
+      ...(coupon ? { subtotal, discount, coupon } : {}),
       customerName: cleanText(body.customerName, 90),
       customerPhone: cleanText(body.customerPhone, 30),
       note: cleanText(body.note, 500),
@@ -234,6 +255,8 @@ function publicOrder(o, cfg) {
       history: Array.isArray(o.history) ? o.history.slice(-30) : [],
       firstName: String(o.customerName || '').trim().split(/\s+/)[0] || '',
       total: o.total,
+      discount: Number(o.discount) || 0,
+      coupon: o.coupon || '',
       cargoCode: code,
       cargoCompany: code ? cfg.cargoCompany || '' : '',
       cargoTrackUrl: code && tpl ? tpl.replace(/\{kod\}/g, encodeURIComponent(code)) : '',
@@ -330,12 +353,30 @@ async function createReview(req) {
   if (!Number.isFinite(productId) || !name || !text) return fail(400, 'Ad ve yorum zorunludur.')
   const rl = await rateLimit(`review:${req.ip}`, 5, 60 * 60 * 1000)
   if (!rl.ok) return fail(429, 'Çok fazla yorum gönderildi. Lütfen daha sonra tekrar deneyin.', { retryAfter: rl.retryAfter })
+  const rawPhotos = Array.isArray(req.body?.photos) ? req.body.photos : []
+  if (rawPhotos.length > 3) return fail(400, 'En fazla 3 fotoğraf eklenebilir.')
   const p = await db()
   const exists = await p.query("SELECT data->>'title' AS title FROM products WHERE id = $1", [productId])
   if (!exists.rowCount) return fail(404, 'Ürün bulunamadı.')
-  await p.query('INSERT INTO reviews (product_id, name, rating, text, approved) VALUES ($1,$2,$3,$4,false)', [productId, name, rating, text])
-  await notifyEvent(p, 'reviews', reviewMessage({ productId, name, rating, text }, exists.rows[0].title, siteOrigin(req)))
+  // Fotoğraflar yorumla birlikte onaya düşer; onaylanana kadar sitede görünmez.
+  const photos = await tx(async (c) => {
+    const urls = []
+    for (const d of rawPhotos) urls.push(await saveImage(c, d, REVIEW_IMAGE_BYTES))
+    await c.query('INSERT INTO reviews (product_id, name, rating, text, approved, photos) VALUES ($1,$2,$3,$4,false,$5)', [productId, name, rating, text, JSON.stringify(urls)])
+    return urls
+  })
+  await notifyEvent(p, 'reviews', reviewMessage({ productId, name, rating, text, photos: photos.length }, exists.rows[0].title, siteOrigin(req)))
   return json(201, { ok: true, pending: true })
+}
+
+async function checkCoupon(req) {
+  const rl = await rateLimit(`coupon:${req.ip}`, 20, 10 * 60 * 1000)
+  if (!rl.ok) return fail(429, 'Çok fazla deneme. Lütfen biraz sonra tekrar deneyin.', { retryAfter: rl.retryAfter })
+  const subtotal = safeNumber(req.body?.subtotal, 0, 0, 100_000_000)
+  const p = await db()
+  const applied = applyCoupon(await loadCoupons(p), req.body?.code, subtotal)
+  if (!applied.ok) return fail(400, applied.error)
+  return json(200, { code: applied.coupon.code, discount: applied.discount, label: couponLabel(applied.coupon) }, NO_STORE)
 }
 
 async function markHelpful(req, id) {
@@ -378,12 +419,13 @@ async function getImage(id) {
 // ── ADMIN UÇLARI ──
 const IMAGE_TYPES = { 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif' }
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024
+const REVIEW_IMAGE_BYTES = 900 * 1024 // müşteri fotoğrafları tarayıcıda küçültülüp gelir
 
-async function saveImage(client, dataUrl) {
+async function saveImage(client, dataUrl, maxBytes = MAX_IMAGE_BYTES) {
   const m = /^data:(image\/(?:webp|jpeg|png|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''))
   if (!m) { const e = new Error('Desteklenmeyen görsel biçimi (WebP, JPEG, PNG, GIF).'); e.status = 400; throw e }
   const buf = Buffer.from(m[2], 'base64')
-  if (!buf.length || buf.length > MAX_IMAGE_BYTES) { const e = new Error('Görsel çok büyük (en fazla 3 MB).'); e.status = 413; throw e }
+  if (!buf.length || buf.length > maxBytes) { const e = new Error(`Görsel çok büyük (en fazla ${Math.round(maxBytes / 1024 / 1024 * 10) / 10} MB).`); e.status = 413; throw e }
   const id = `${crypto.randomBytes(12).toString('hex')}.${IMAGE_TYPES[m[1]]}`
   await client.query('INSERT INTO images (id, mime, data) VALUES ($1, $2, $3)', [id, m[1], buf])
   return `/api/images/${id}`
@@ -465,6 +507,18 @@ async function adminRoute(req, seg) {
         }
       })
       return json(200, { settings: clean, renamed }, NO_STORE)
+    }
+  }
+
+  if (resource === 'coupons') {
+    if (m === 'GET') return json(200, { coupons: await loadCoupons(p) }, NO_STORE)
+    if (m === 'PUT') {
+      const list = await tx(async (c) => {
+        const clean = sanitizeCoupons(req.body?.coupons, await loadCoupons(c, { lock: true }))
+        await saveCoupons(c, clean)
+        return clean
+      })
+      return json(200, { coupons: list }, NO_STORE)
     }
   }
 
@@ -601,13 +655,14 @@ async function adminRoute(req, seg) {
   // Fotoğrafların kendisi dahil değildir (veritabanında kalır); Telegram token'ı
   // ve PIN asla yedeğe yazılmaz.
   if (resource === 'backup' && m === 'GET') {
-    const [products, site, notify, orders, reviews, messages] = await Promise.all([
+    const [products, site, notify, orders, reviews, messages, coupons] = await Promise.all([
       p.query('SELECT data FROM products ORDER BY id'),
       loadSettings(p),
       loadNotify(p),
       p.query('SELECT * FROM orders ORDER BY created_at, id'),
       p.query('SELECT * FROM reviews ORDER BY created_at, id'),
       p.query('SELECT * FROM messages ORDER BY created_at, id'),
+      loadCoupons(p),
     ])
     const { telegramToken: _omit, ...notifySafe } = notify
     return json(200, {
@@ -616,11 +671,11 @@ async function adminRoute(req, seg) {
         version: 1,
         createdAt: new Date().toISOString(),
         products: products.rows.map((r) => r.data),
-        settings: { site, notify: notifySafe },
+        settings: { site, notify: notifySafe, coupons },
         orders: orders.rows.map((r) => ({ orderNo: r.order_no, status: r.status, data: r.data, createdAt: r.created_at, updatedAt: r.updated_at })),
         reviews: reviews.rows.map((r) => ({
           productId: r.product_id, name: r.name, rating: r.rating, text: r.text, helpful: r.helpful,
-          approved: r.approved, dateLabel: r.date_label, reply: r.reply, replyAt: r.reply_at, createdAt: r.created_at,
+          approved: r.approved, dateLabel: r.date_label, reply: r.reply, replyAt: r.reply_at, photos: reviewPhotos(r.photos), createdAt: r.created_at,
         })),
         messages: messages.rows.map((r) => ({ data: r.data, read: r.is_read, createdAt: r.created_at })),
       },
@@ -644,6 +699,10 @@ async function adminRoute(req, seg) {
            ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
           [sanitizeSettings(bk.settings.site)],
         )
+      }
+      if (Array.isArray(bk.settings?.coupons)) {
+        const prev = bk.settings.coupons
+        await saveCoupons(c, sanitizeCoupons(prev, prev.map((x) => ({ code: couponCode(x?.code), used: Math.round(safeNumber(x?.used, 0, 0, 1_000_000)) }))))
       }
       if (bk.settings?.notify && typeof bk.settings.notify === 'object') {
         // Mevcut Telegram token'ı korunur (yedekte yoktur).
@@ -669,10 +728,10 @@ async function adminRoute(req, seg) {
         if (!name || !text || !Number.isFinite(pid)) continue
         const reply = cleanMultiline(r.reply, 1000).replace(/[<>]/g, '')
         await c.query(
-          `INSERT INTO reviews (product_id, name, rating, text, helpful, approved, date_label, reply, reply_at, created_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          `INSERT INTO reviews (product_id, name, rating, text, helpful, approved, date_label, reply, reply_at, created_at, photos)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [pid, name, rating, text, Math.round(safeNumber(r.helpful, 0, 0, 99999)), r.approved !== false,
-            cleanText(r.dateLabel, 60) || null, reply || null, reply ? date(r.replyAt) : null, date(r.createdAt)],
+            cleanText(r.dateLabel, 60) || null, reply || null, reply ? date(r.replyAt) : null, date(r.createdAt), JSON.stringify(reviewPhotos(r.photos))],
         )
         counts.reviews++
       }
@@ -801,6 +860,7 @@ export async function route(req) {
       const r = await customerRoute(req, seg)
       if (r) return r
     }
+    if (seg[0] === 'coupons' && seg[1] === 'check' && m === 'POST') return await checkCoupon(req)
     if (seg[0] === 'reviews' && m === 'POST' && seg.length === 1) return await createReview(req)
     if (seg[0] === 'reviews' && seg[2] === 'helpful' && m === 'POST') return await markHelpful(req, seg[1])
     if (seg[0] === 'messages' && m === 'POST' && seg.length === 1) return await createMessage(req)

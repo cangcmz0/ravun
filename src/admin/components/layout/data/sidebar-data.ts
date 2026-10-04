@@ -8,6 +8,7 @@ import {
   ShoppingBag,
   Star,
   Settings,
+  TicketPercent,
 } from 'lucide-react'
 import { type SidebarData } from '../types'
 
@@ -52,6 +53,11 @@ export const sidebarData: SidebarData = {
           title: 'Mesajlar',
           url: '/messages',
           icon: Mail,
+        },
+        {
+          title: 'Kuponlar',
+          url: '/coupons',
+          icon: TicketPercent,
         },
         {
           title: 'Raporlar',

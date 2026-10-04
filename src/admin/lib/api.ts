@@ -160,6 +160,27 @@ export type NotifySettings = {
   cargoCompany: string
   cargoTrackUrl: string
 }
+// ── İNDİRİM KUPONLARI ──
+export interface Coupon {
+  code: string
+  type: 'percent' | 'amount'
+  value: number
+  minTotal: number
+  maxUses: number
+  used: number
+  expiresAt: string
+  active: boolean
+  note: string
+}
+export async function fetchCoupons() {
+  const { coupons } = await request<{ coupons: Coupon[] }>('/admin/coupons')
+  return coupons
+}
+export async function saveCoupons(list: Coupon[]) {
+  const { coupons } = await request<{ coupons: Coupon[] }>('/admin/coupons', 'PUT', { coupons: list })
+  return coupons
+}
+
 export async function fetchNotify() {
   const { notify } = await request<{ notify: NotifySettings }>('/admin/notify')
   return notify

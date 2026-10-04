@@ -173,6 +173,22 @@ Müşteri isterse Google hesabıyla giriş yapar (şifre yok). Giriş zorunlu de
 - **Site haritası** (`/sitemap.xml`) artık veritabanından üretilir; panelden eklenen
   ürünler de girer.
 
+## İndirim kuponları ve fotoğraflı yorumlar
+
+- **Kuponlar** (panel → Kuponlar): yüzde ya da sabit tutar indirim, en az sepet
+  tutarı, kullanım sınırı, son gün ve açık/kapalı düğmesi. Müşteri kodu sepette
+  "İndirim kodunuz var mı?" alanına yazar. Kod büyük/küçük harf ve Türkçe harf
+  farkı gözetmez (`hoşgeldin10` = `HOSGELDIN10`). İndirim yalnızca sunucuda
+  hesaplanır; sipariş kaydına `subtotal`, `discount`, `coupon` yazılır ve
+  kullanım sayısı aynı işlemde artar. Panel ciroları ve raporlar indirimli
+  tutarı kullanır; sipariş detayı, yazdırma fişi, Telegram bildirimi ve
+  sipariş takip sayfası kuponu gösterir. Kuponlar yedeğe dahildir.
+- **Fotoğraflı yorumlar**: müşteri yoruma en fazla 3 fotoğraf ekleyebilir.
+  Fotoğraflar tarayıcıda 1280 px WebP'ye küçültülür (genelde 50–150 KB),
+  sunucu tek fotoğrafı 900 KB ile sınırlar. Yorum gibi fotoğraflar da panelden
+  onaylanana kadar sitede görünmez. Ürün sayfasında "Fotoğraflı" filtresi ve
+  büyük görüntüleyici var.
+
 ## Vercel kurulumu (bir kez)
 
 1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →
