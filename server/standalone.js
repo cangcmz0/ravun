@@ -42,6 +42,8 @@ http.createServer((req, res) => {
   for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v)
   const { pathname } = new URL(req.url, 'http://localhost')
   if (pathname === '/api' || pathname.startsWith('/api/')) return handleNode(req, res)
+  // Site haritası veritabanından üretilir (vercel.json'daki rewrite ile aynı)
+  if (pathname === '/sitemap.xml') { req.url = '/api/sitemap'; return handleNode(req, res) }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; return res.end() }
   const file = resolveStatic(pathname)
   if (file) return sendFile(res, file, pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache')

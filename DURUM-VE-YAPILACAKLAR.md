@@ -157,6 +157,22 @@ Müşteri isterse Google hesabıyla giriş yapar (şifre yok). Giriş zorunlu de
    Environment Variables'a `GOOGLE_CLIENT_ID` ve `GOOGLE_CLIENT_SECRET` olarak
    (Production + Preview) ekle → Redeploy.
 
+## Yasal metinler ve SEO
+- **Yasal sayfalar** (`/yasal/...`, sitenin alt kısmında bağlantılar): Ön Bilgilendirme
+  Formu, Mesafeli Satış Sözleşmesi, İade ve Değişim Koşulları, KVKK Aydınlatma Metni,
+  Çerez Politikası. Satıcı bilgileri Panel → Site ayarları → **Yasal bilgiler**'den
+  gelir (unvan, adres, vergi bilgisi zorunlu). Kişiye özel üretimlerde cayma hakkı
+  istisnası metinlerde yer alır. Metinler genel şablondur; bir avukata kontrol ettirin.
+- **Siparişte onay:** Sepette ön bilgilendirme formu ve mesafeli satış sözleşmesi onay
+  kutusu zorunlu; onay zamanı ve metin sürümü siparişe kaydedilir (sunucu da onaysız
+  siparişi reddeder).
+- **Çerez bildirimi:** Yalnızca zorunlu çerez/depolama kullanıldığı için onay değil
+  bilgilendirme gösterilir; "Tamam" sonrası tekrar çıkmaz.
+- **Ürün sayfası:** satın alma alanında iade süresi satırı (koşullara bağlantılı).
+- **Google:** ürün yapısal verisine iade politikası ve yorum puanı eklendi.
+- **Site haritası** (`/sitemap.xml`) artık veritabanından üretilir; panelden eklenen
+  ürünler de girer.
+
 ## Vercel kurulumu (bir kez)
 
 1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →
@@ -222,5 +238,4 @@ npm run dev               # site + panel + API birlikte (Vite içinde)
 - Online ödeme yok; ödeme WhatsApp üzerinden konuşuluyor.
 - Telefonla (SMS kodu) giriş yok; SMS firması hesabı açılınca otomatik sipariş
   mesajlarıyla birlikte eklenecek.
-- KVKK: müşteri hesabı ad ve e-posta saklıyor; gizlilik/aydınlatma metni sitede
-  henüz yok, eklenmeli.
+- ETBİS kaydı (Ticaret Bakanlığı e-ticaret bilgi sistemi) site dışında yapılmalı.
