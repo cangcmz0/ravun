@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import './style.css';
 import PRODUCT_SEED from './data/products.json';
+import { LegalPage, LEGAL_SLUGS, LEGAL_DOCS, legalTitle } from './legal.jsx';
 const A = '/assets/';
 const ENV = import.meta.env || {};
 const SITE_URL = ENV.VITE_SITE_URL || 'https://ravun-tau.vercel.app';
@@ -74,6 +75,7 @@ const DEFAULT_SITE_SETTINGS = {
   giftTitle: 'Hediye olarak hazırlansın',
   giftDesc: 'Kraft kutu, Ravun kartı, not alanı ve korumalı sunum seçeneği.',
   giftPrice: 180,
+  returnDays: 14,
   showAtelierFeature: false,
   showEditions: false,
   showArchive: true,
@@ -615,6 +617,7 @@ const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim'
 const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_SLUGS).map(([k,v])=>[v,k]));
 function pagePath(page, product) {
   if (page === 'product' && product) return `/urun/${product.id}`;
+  if (String(page).startsWith('legal:')) return `/yasal/${page.slice(6)}`;
   if (page && page !== 'home') return `/${PAGE_SLUGS[page] || page}`;
   return '/';
 }
@@ -635,7 +638,7 @@ function metaDescriptionFor(page, product) {
   if (page === 'track') return 'Ravun siparişinizin durumunu sipariş numaranız ve telefonunuzla takip edin.';
   return 'Ravun — ahşap, epoksi ve el yapımı premium tasarım atölyesi.';
 }
-function structuredDataFor(page, product) {
+function structuredDataFor(page, product, extra = {}) {
   const org = {
     '@context':'https://schema.org',
     '@type':'Organization',
@@ -663,8 +666,22 @@ function structuredDataFor(page, product) {
         priceCurrency:'TRY',
         price:String(Number(product.price || 0)),
         availability,
-        itemCondition:'https://schema.org/NewCondition'
-      }
+        itemCondition:'https://schema.org/NewCondition',
+        // İade politikası (Google alışveriş sonuçları için)
+        hasMerchantReturnPolicy:{
+          '@type':'MerchantReturnPolicy',
+          applicableCountry:'TR',
+          returnPolicyCategory:'https://schema.org/MerchantReturnFiniteReturnWindow',
+          merchantReturnDays:Number(extra.settings?.returnDays) || 14,
+          returnMethod:'https://schema.org/ReturnByMail',
+          merchantReturnLink:absoluteUrl('/yasal/iade-ve-degisim')
+        }
+      },
+      ...(extra.reviews?.length ? {aggregateRating:{
+        '@type':'AggregateRating',
+        ratingValue:(extra.reviews.reduce((t,r)=>t+r.rating,0)/extra.reviews.length).toFixed(1),
+        reviewCount:extra.reviews.length
+      }} : {})
     }, {
       '@context':'https://schema.org',
       '@type':'BreadcrumbList',
@@ -695,7 +712,7 @@ function setMetaTag(selector, attr, value) {
   }
   el.setAttribute(attr, value);
 }
-function updateStructuredData(page, product) {
+function updateStructuredData(page, product, extra) {
   let el = document.getElementById('ravun-structured-data');
   if (!el) {
     el = document.createElement('script');
@@ -707,9 +724,9 @@ function updateStructuredData(page, product) {
      "</script>" içerikli bir değer script'i erken kapatamaz — ama yine de savunma
      katmanı olarak '<' karakteri kaçışlanır (bkz. scripts/prerender.mjs'teki
      jsonForScript ile aynı önlem, statik derleme çıktısıyla tutarlılık için). */
-  el.textContent = JSON.stringify(structuredDataFor(page, product)).replace(/</g, '\\u003c');
+  el.textContent = JSON.stringify(structuredDataFor(page, product, extra)).replace(/</g, '\\u003c');
 }
-function updateMeta(page, product) {
+function updateMeta(page, product, extra = {}) {
   const title = page === 'product' && product
     ? `${product.title} | Ravun`
     : page === 'collection' ? 'Koleksiyon | Ravun'
@@ -719,6 +736,7 @@ function updateMeta(page, product) {
     : page === 'track' ? 'Sipariş Takibi | Ravun'
     : page === 'notfound' ? 'Sayfa bulunamadı | Ravun'
     : page === 'account' ? 'Hesabım | Ravun'
+    : String(page).startsWith('legal:') ? `${legalTitle(page.slice(6))} | Ravun`
     : 'Ravun | Ahşap & Epoksi Atölyesi';
   const description = metaDescriptionFor(page, product);
   const url = absoluteUrl(pagePath(page, product));
@@ -744,7 +762,7 @@ function updateMeta(page, product) {
   let canonical = document.querySelector('link[rel="canonical"]');
   if(!canonical){canonical=document.createElement('link');canonical.rel='canonical';document.head.appendChild(canonical);}
   canonical.href = url;
-  updateStructuredData(page, product);
+  updateStructuredData(page, product, extra);
 }
 function productSharePayload(product) {
   const title = `${product.title} | Ravun`;
@@ -1311,6 +1329,7 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
               <button className={`shareBtn ${copied?'copied':''}`} onClick={shareProduct} aria-label="Ürünü paylaş"><IShare/> <span>{copied?'Link kopyalandı':'Paylaş'}</span></button>
             </div>
             <div className="pdDelivery"><ITruck/><span>Teslim: {product.delivery} · Sigortalı kargo</span></div>
+            <button type="button" className="pdReturnLine" onClick={()=>go('legal:iade-ve-degisim')}><ICheck/><span>{Number(settings?.returnDays)||14} gün içinde iade hakkı · kişiye özel üretimler hariç</span><b>Koşullar ›</b></button>
             <div className="pdTrustMini" aria-label="Ravun güven bilgileri">
               <div><span className="trustIcon"><IHand/></span><span><b>El yapımı</b><small>Tek tek üretilir</small></span></div>
               <div><span className="trustIcon"><ILeaf/></span><span><b>Doğal ahşap</b><small>Damar yapısı korunur</small></span></div>
@@ -1919,6 +1938,7 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
   const [busy,setBusy]=useState(false);
   const [orderError,setOrderError]=useState('');
   const [touched,setTouched]=useState(false);
+  const [accepted,setAccepted]=useState(false);
   const total=useMemo(()=>cart.reduce((s,x)=>s+x.price*x.qty,0),[cart]);
   const itemCount=cart.reduce((s,x)=>s+Number(x.qty||0),0);
   const giftCount=cart.filter(x=>x.giftWrap).length;
@@ -1943,10 +1963,10 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
   },[open]);
   const submitOrder=async()=>{
     setTouched(true);
-    if(!nameOk||!phoneOk||busy||cart.length===0)return;
+    if(!nameOk||!phoneOk||!accepted||busy||cart.length===0)return;
     setBusy(true); setOrderError('');
     try{
-      const order=await createOrder({customerName:customer.name.trim(),customerPhone:customer.phone.trim(),note:customer.note.trim()});
+      const order=await createOrder({customerName:customer.name.trim(),customerPhone:customer.phone.trim(),note:customer.note.trim(),acceptedTerms:true});
       setCreated(order); setStep('done');
     }catch(err){
       setOrderError(err.message||'Sipariş oluşturulamadı.');
@@ -2005,6 +2025,11 @@ function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCa
                 </div>
                 <textarea value={customer.note} onChange={e=>setCustomer(c=>({...c,note:e.target.value}))} rows={3} placeholder="Ölçü, renk veya özel isteğiniz"/>
               </div>
+              <label className={`cxTerms ${touched&&!accepted?'cxInvalid':''}`}>
+                <input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/>
+                <span><a href="/yasal/on-bilgilendirme-formu" target="_blank" rel="noopener">Ön bilgilendirme formunu</a> ve <a href="/yasal/mesafeli-satis-sozlesmesi" target="_blank" rel="noopener">mesafeli satış sözleşmesini</a> okudum, onaylıyorum. Kişisel verilerim <a href="/yasal/kvkk-aydinlatma-metni" target="_blank" rel="noopener">aydınlatma metnine</a> uygun işlenir.</span>
+              </label>
+              {touched&&!accepted&&<em className="cxTermsErr">Siparişi tamamlamak için onay kutusunu işaretleyin.</em>}
               {orderError&&(
                 <div className="cxError" role="alert">
                   <p>{orderError}</p>
@@ -2199,6 +2224,19 @@ function AccountPage({account, go, favorites, onLogout, onDeleted}){
         )}
       </section>
     </main>
+  );
+}
+/* ── ÇEREZ BİLGİLENDİRMESİ ──
+   Site yalnızca zorunlu çerez/depolama kullandığı için onay değil bilgilendirme gösterilir. */
+function CookieNotice({go}){
+  const [show,setShow]=useState(()=>{try{return localStorage.getItem('ravun:cookieOk')!=='1';}catch{return false;}});
+  if(!show)return null;
+  const ok=()=>{try{localStorage.setItem('ravun:cookieOk','1');}catch{} setShow(false);};
+  return (
+    <div className="cookieNote" role="region" aria-label="Çerez bilgilendirmesi">
+      <p>Sitemiz yalnızca sepet, favoriler ve oturum için gerekli çerezleri kullanır; reklam veya izleme çerezi yoktur. <button type="button" className="linkBtn" onClick={()=>go('legal:cerez-politikasi')}>Çerez politikası</button></p>
+      <button type="button" className="cookieOk" onClick={ok}>Tamam</button>
+    </div>
   );
 }
 /* ── 404 ── */
@@ -2403,6 +2441,7 @@ function Footer({go, settings, onAdmin}){
       <nav><b>Atölye</b><button onClick={()=>go('collection')}>Koleksiyon</button><button onClick={()=>go('story')}>Hikayemiz</button><button onClick={()=>go('contact')}>Sipariş</button><button onClick={()=>go('track')}>Sipariş takibi</button></nav>
       <nav><b>Sosyal</b><a href={safeUrl(settings?.instagramUrl || 'https://instagram.com/ravun.atolye', 'https://instagram.com/')} target="_blank" rel="noreferrer">{settings?.instagram || '@ravun.atolye'}</a><span className="footerSoon">{settings?.pinterestLabel || 'Pinterest — yakında'}</span></nav>
       <nav><b>İletişim</b><a href={`mailto:${WA_EMAIL}`}>{WA_EMAIL}</a><a href={`https://wa.me/${WA_NUMBER}`} target="_blank" rel="noreferrer">{WA_DISPLAY}</a></nav>
+      <div className="footerLegal">{LEGAL_DOCS.map(([slug,title])=><button key={slug} type="button" onClick={()=>go(`legal:${slug}`)}>{title}</button>)}</div>
       <small onClick={handleSecretTap} style={{userSelect:'none'}}>© 2026 Ravun Atölye · Tüm hakları saklıdır.</small>
     </footer>
   );
@@ -2718,6 +2757,8 @@ function parseInitialRoute(products){
     // Ürün henüz yüklenmemiş katalogda olabilir — katalog gelince çözülür.
     return {page:'product', product:product||null, productId:Number.isFinite(id)?id:null};
   }
+  const legal = path.match(/^\/yasal\/([a-z-]+)$/);
+  if(legal && LEGAL_SLUGS.includes(legal[1])) return {page:`legal:${legal[1]}`, product:null};
   const slug = path.replace(/^\//,'');
   const page = SLUG_TO_PAGE[slug];
   if(page) return {page, product:null};
@@ -2880,7 +2921,7 @@ function App(){
   useAutosave('ravun:favorites', favorites, 500, catalogReady);
   useAutosave('ravun:cart', cart, 500, catalogReady);
   useAutosave('ravun:recent', recentIds, 500, catalogReady);
-  useEffect(()=>updateMeta(page,currentProduct),[page,currentProduct]);
+  useEffect(()=>updateMeta(page,currentProduct,{settings:siteSettings, reviews:currentProduct?reviewList(allReviews,currentProduct.id):[]}),[page,currentProduct,siteSettings,allReviews]);
   useEffect(()=>{ if(page==='product'&&currentProduct){ setRecentIds(ids=>[currentProduct.id,...(ids||[]).filter(id=>id!==currentProduct.id)].slice(0,8)); } },[page,currentProduct?.id]);
   useEffect(()=>{const nav=e=>go(e.detail);window.addEventListener('ravun:navigate',nav);return()=>window.removeEventListener('ravun:navigate',nav);},[go]);
   useEffect(()=>{
@@ -2949,7 +2990,8 @@ function App(){
       items:cart.map(({id,baseId,qty,selectedSize,selectedColor,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery})=>({id,baseId:baseId??id,qty,selectedSize,selectedColor,giftWrap,giftStyle,giftNote,giftRecipient,giftDelivery})),
       customerName:customer.customerName||'',
       customerPhone:customer.customerPhone||'',
-      note:customer.note||''
+      note:customer.note||'',
+      acceptedTerms:customer.acceptedTerms===true
     });
     rememberMyOrder(order.orderNo, customer.customerPhone);
     if(toastTimer.current)clearTimeout(toastTimer.current);
@@ -2968,6 +3010,7 @@ function App(){
       {page==='contact'&&<ContactPage settings={siteSettings}/>}
       {page==='track'&&<TrackPage go={go}/>}
       {page==='notfound'&&<NotFoundPage go={go}/>}
+      {String(page).startsWith('legal:')&&<LegalPage doc={page.slice(6)} settings={siteSettings} go={go} contact={{phone:WA_DISPLAY, email:WA_EMAIL}}/>}
       {page==='account'&&<AccountPage account={account} go={go} favorites={favorites} onLogout={logout} onDeleted={signedOut}/>}
       {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go} account={account}/>}
       {page==='product'&&!currentProduct&&<main className="page productDetailPage"><p className="pageLoading">Ürün yükleniyor…</p></main>}
@@ -2983,6 +3026,7 @@ function App(){
       <SearchOverlay open={searchOpen} onClose={()=>setSearchOpen(false)} products={products} goProduct={goProduct}/>
       <BottomNav page={page} go={go} onSearch={()=>setSearchOpen(true)} onCart={()=>setDrawer(true)} favCount={favorites.length} cartCount={cart.reduce((s,x)=>s+x.qty,0)}/>
       {toast&&<div className={`toast ${drawer?'toastTop':''}`} role="status">✓ {toast}</div>}
+      <CookieNotice go={go}/>
     </>
   );
 }

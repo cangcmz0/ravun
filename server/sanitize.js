@@ -132,6 +132,9 @@ const SETTINGS_TEXT_LIMITS = {
   announcement: 200, storyTitle: 200, storyDesc: 600, packageTitle: 200, packageDesc: 600,
   footerDesc: 240, footerLocation: 120, instagram: 80, pinterestLabel: 80,
   giftTitle: 90, giftDesc: 240, styleVersion: 60,
+  // Yasal metinlerde kullanılan satıcı bilgileri (Mesafeli Sözleşmeler Yönetmeliği)
+  sellerName: 140, sellerAddress: 300, sellerTax: 120, sellerPhone: 40, sellerEmail: 120,
+  sellerKep: 120, sellerMersis: 40, shippingNote: 200,
 }
 const SETTINGS_MULTILINE = { collectionTitle: 160, atelierTitle: 160 }
 const SETTINGS_FLAGS = [
@@ -147,6 +150,7 @@ export function sanitizeSettings(s) {
   for (const k of SETTINGS_FLAGS) if (typeof src[k] === 'boolean') out[k] = src[k]
   if ('instagramUrl' in src) out.instagramUrl = safeUrl(src.instagramUrl, 'https://instagram.com/')
   if ('giftPrice' in src) out.giftPrice = safeNumber(src.giftPrice, 0, 0, 100000)
+  if ('returnDays' in src) out.returnDays = Math.round(safeNumber(src.returnDays, 14, 14, 365))
   // Kategori listesi (sıralı; "Tümü" hariç). Aynı anahtara düşen adlar tekilleştirilir.
   if (Array.isArray(src.categories)) {
     const seen = new Set()

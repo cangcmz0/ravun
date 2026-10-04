@@ -41,6 +41,17 @@ const VISIBILITY_SWITCHES = [
   ['showCta', 'Alt çağrı (CTA) bölümü', 'Sayfa sonundaki "Bize yazın" bandı.'],
 ] as const
 
+const LEGAL_FIELDS: [string, string, string, boolean?][] = [
+  ['sellerName', 'Unvan (şahıs şirketinde ad soyad)', 'Örn. Ad Soyad – Ravun Atölye', true],
+  ['sellerAddress', 'Açık adres', 'Mahalle, cadde, no, ilçe / il', true],
+  ['sellerTax', 'Vergi dairesi / vergi no (veya T.C. kimlik no)', 'Örn. Beykoz VD / 1234567890'],
+  ['sellerPhone', 'Telefon', '+90 5xx xxx xx xx'],
+  ['sellerEmail', 'E-posta', 'atolye@ravun.com.tr'],
+  ['sellerKep', 'KEP adresi (varsa)', 'ornek@hs01.kep.tr'],
+  ['sellerMersis', 'MERSİS no (varsa)', ''],
+  ['shippingNote', 'Kargo ücreti bilgisi', 'Örn. Türkiye geneli kargo ücretsizdir.', true],
+]
+
 export function Settings() {
   const [form, setForm] = useState<any>(null)
   const [loadError, setLoadError] = useState('')
@@ -89,6 +100,8 @@ export function Settings() {
         [key]: { ...f.categorySettings[key], [field]: value },
       },
     }))
+
+  const legalMissing = Boolean(form) && !(form.sellerName && form.sellerAddress && form.sellerTax)
 
   const handleSave = async () => {
     if (!form || saving) return
@@ -160,6 +173,7 @@ export function Settings() {
             <TabsTrigger value='paketleme'>Paketleme & Hediye</TabsTrigger>
             <TabsTrigger value='sosyal'>Instagram & Footer</TabsTrigger>
             <TabsTrigger value='gorunurluk'>Görünürlük</TabsTrigger>
+            <TabsTrigger value='yasal'>Yasal bilgiler{legalMissing ? ' •' : ''}</TabsTrigger>
           </TabsList>
 
           {/* ── HERO ── */}
@@ -288,6 +302,37 @@ export function Settings() {
                   texts={form.categorySettings?.tum || defaultTexts('Tümü')}
                   setText={(k) => (v) => setCat('tum', k)(v)}
                 />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* ── YASAL BİLGİLER ── */}
+          <TabsContent value='yasal' className='mt-4 space-y-4'>
+            <Card>
+              <CardHeader>
+                <CardTitle>Satıcı bilgileri</CardTitle>
+                <CardDescription>
+                  Mesafeli satış sözleşmesi, ön bilgilendirme formu, KVKK aydınlatma metni ve iade koşulları bu bilgilerle otomatik doldurulur
+                  (sitede alt kısımdaki bağlantılar). Metinler genel şablondur; bir avukata kontrol ettirmeniz önerilir.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='grid gap-4 sm:grid-cols-2'>
+                {legalMissing && (
+                  <p className='rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 sm:col-span-2 dark:bg-amber-900/30 dark:text-amber-200'>
+                    Unvan, adres ve vergi bilgisi yasal olarak zorunludur. Boş alanlar sitede gösterilmez.
+                  </p>
+                )}
+                {LEGAL_FIELDS.map(([key, label, placeholder, full]) => (
+                  <div key={key} className={`grid gap-1.5 ${full ? 'sm:col-span-2' : ''}`}>
+                    <Label htmlFor={`st-${key}`}>{label}</Label>
+                    <Input id={`st-${key}`} value={form[key] || ''} onChange={(e) => set(key)(e.target.value)} placeholder={placeholder} />
+                  </div>
+                ))}
+                <div className='grid gap-1.5'>
+                  <Label htmlFor='st-returnDays'>Cayma (iade) süresi — gün</Label>
+                  <Input id='st-returnDays' type='number' min={14} max={365} value={form.returnDays ?? 14} onChange={(e) => set('returnDays')(Number(e.target.value))} />
+                  <p className='text-muted-foreground text-xs'>Yasal en az süre 14 gündür.</p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

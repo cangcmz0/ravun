@@ -66,6 +66,27 @@ function orderRow(r) {
   }
 }
 
+// Yasal metinlerin sürümü: metinler değişince güncellenir, siparişe onaylanan sürüm yazılır.
+const LEGAL_VERSION = '2026-10'
+
+// ── SİTE HARİTASI (veritabanından; panelden eklenen ürünler de girer) ──
+async function sitemap(req) {
+  const p = await db()
+  const { rows } = await p.query('SELECT id, data, updated_at FROM products ORDER BY id')
+  const origin = siteOrigin(req)
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  const day = (d) => new Date(d).toISOString().slice(0, 10)
+  const today = day(Date.now())
+  const urls = [
+    ['/', '1.0', today], ['/koleksiyon', '0.9', today], ['/hikaye', '0.6', today], ['/iletisim', '0.6', today],
+    ...rows.filter((r) => r.data?.visible !== false).map((r) => [`/urun/${r.id}`, '0.8', day(r.updated_at)]),
+  ]
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${
+    urls.map(([u, pr, lm]) => `  <url><loc>${esc(origin + u)}</loc><lastmod>${lm}</lastmod><priority>${pr}</priority></url>`).join('\n')
+  }\n</urlset>\n`
+  return { status: 200, headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }, body: Buffer.from(xml) }
+}
+
 function makeOrderNo() {
   const d = new Date()
   const ymd = `${String(d.getFullYear()).slice(-2)}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
@@ -109,6 +130,8 @@ async function createOrder(req) {
   const body = req.body || {}
   const items = Array.isArray(body.items) ? body.items.slice(0, 50) : []
   if (!items.length) return fail(400, 'Sepet boş.')
+  // Ön bilgilendirme formu ve mesafeli satış sözleşmesi siparişten önce onaylanmalı.
+  if (body.acceptedTerms !== true) return fail(400, 'Siparişi tamamlamak için ön bilgilendirme formunu ve mesafeli satış sözleşmesini onaylayın.')
   const result = await tx(async (client) => {
     const ids = [...new Set(items.map((i) => Math.round(Number(i?.baseId ?? i?.id))).filter(Number.isFinite))]
     const { rows } = await client.query('SELECT id, data FROM products WHERE id = ANY($1::int[])', [ids])
@@ -156,6 +179,7 @@ async function createOrder(req) {
       cargoCode: '',
       source: 'site',
       history: [{ status: 'pending', at: new Date().toISOString() }],
+      legal: { acceptedAt: new Date().toISOString(), version: LEGAL_VERSION },
       ...(cust ? { customerId: String(cust.id), customerEmail: cust.email } : {}),
     }
     let orderNo = makeOrderNo()
@@ -770,6 +794,7 @@ export async function route(req) {
       }, NO_STORE)
     }
     if (seg[0] === 'catalog' && m === 'GET') return await getCatalog()
+    if (seg[0] === 'sitemap' && (m === 'GET' || m === 'HEAD')) return await sitemap(req)
     if (seg[0] === 'orders' && m === 'POST' && seg.length === 1) return await createOrder(req)
     if (seg[0] === 'orders' && seg[1] === 'track' && m === 'POST') return await trackOrder(req)
     if (seg[0] === 'auth' || seg[0] === 'me') {
