@@ -7,6 +7,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { RavunLogo } from '@/assets/ravun-logo'
 import { Button } from '../ui/button'
 
 export function AppTitle() {
@@ -23,10 +24,11 @@ export function AppTitle() {
             <Link
               to='/'
               onClick={() => setOpenMobile(false)}
-              className='grid flex-1 text-start text-sm leading-tight'
+              className='flex min-w-0 flex-1 flex-col items-start leading-tight'
+              aria-label='Ravun Yönetim Paneli — ana sayfa'
             >
-              <span className='truncate font-bold'>Ravun</span>
-              <span className='truncate text-xs'>Yönetim Paneli</span>
+              <RavunLogo className='-ms-1 h-8 w-[104px]' />
+              <span className='text-sidebar-foreground/60 ps-0.5 text-[10px] font-semibold tracking-[0.22em] uppercase'>Atölye paneli</span>
             </Link>
             <ToggleSidebar />
           </div>

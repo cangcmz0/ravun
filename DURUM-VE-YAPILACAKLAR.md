@@ -101,6 +101,21 @@ yorumlar bir kez yüklenir.
   paketi oranı, günlük/haftalık/aylık ciro grafiği, en çok satan ürünler, kategori
   dağılımı, durum dağılımı ve Excel'e (CSV) aktarma. İptaller ciroya dahil edilmez.
 
+## Ravun'a özgü detaylar
+- **Parça kimliği:** Ürün sayfasında lazerle kazınmış ahşap etiket görünümünde kart
+  (parça no, ahşap, epoksi, ölçü, el işçiliği süresi, bitiş, "tek parça" mührü).
+- **İkinci fotoğraf:** Ürün kartının üzerine gelince (fareli cihazlarda) galerideki
+  ikinci fotoğraf görünür.
+- **Sipariş takibi:** adımlar atölye simgeleriyle (fiş, onay mührü, epoksi dökümü,
+  paket, kargo, ev); bulunulan adım hafifçe nabız atar.
+- **Özel 404:** "Bu parça atölyeden çıkmamış"; kaldırılmış ürün linklerinde
+  "Bu parça artık koleksiyonda değil" + "Benzerini sor" (WhatsApp). Arama motorlarına
+  `noindex` bildirilir.
+- **Panel:** kenar çubuğunda Ravun logosu, fotoğraflı giriş ekranı, günün selamı ve
+  yapılacaklar ("1 sipariş onay bekliyor" gibi tıklanabilir), her sayfada "Siteyi aç".
+- **Telefonda uygulama gibi:** Panel ana ekrana eklenebilir (`/admin.webmanifest`,
+  "Ravun Panel" adı ve simgesi). Telefonda panelde bir kez öneri kartı çıkar.
+
 ## Vercel kurulumu (bir kez)
 
 1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →

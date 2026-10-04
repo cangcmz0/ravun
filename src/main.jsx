@@ -731,11 +731,13 @@ function updateMeta(page, product) {
     : page === 'contact' ? 'İletişim | Ravun'
     : page === 'favorites' ? 'Favoriler | Ravun'
     : page === 'track' ? 'Sipariş Takibi | Ravun'
+    : page === 'notfound' ? 'Sayfa bulunamadı | Ravun'
     : 'Ravun | Ahşap & Epoksi Atölyesi';
   const description = metaDescriptionFor(page, product);
   const url = absoluteUrl(pagePath(page, product));
   const image = imageUrlForMeta(product?.image || '/assets/hero-1.webp');
   document.title = title;
+  setMetaTag('meta[name="robots"]','content', page === 'notfound' ? 'noindex' : 'index,follow');
   setMetaTag('meta[name="description"]','content',description);
   setMetaTag('meta[name="theme-color"]','content','#F7F3E8');
   setMetaTag('meta[property="og:type"]','content',page === 'product' && product ? 'product' : 'website');
@@ -1385,9 +1387,8 @@ function ProductDetails({product}){
     ['Ağırlık', product.weight],
     ['Üretim süresi', product.craftTime],
     ['Yüzey bitişi', product.finish],
-    ['Teslim', product.delivery ? `${product.delivery} · sigortalı kargo` : ''],
-    ['Parça no', certificateNo(product)],
-    ['Tekrar durumu', product.repeatable]
+    ['Teslim', product.delivery ? `${product.delivery} · sigortalı kargo` : '']
+    // Parça no ve tekrar durumu yandaki "Parça kimliği" kartında
   ].filter(([,v])=>v);
   const careTips = (product.careTips && product.careTips.length) ? product.careTips : defaultCareTips(product);
   const faqs=[
@@ -1409,6 +1410,7 @@ function ProductDetails({product}){
         )}
       </div>
       <div className="pdxInfo">
+        <ProductIdentityTag product={product}/>
         <details open>
           <summary>Bakım rehberi</summary>
           {product.careSummary && <p>{product.careSummary}</p>}
@@ -1429,6 +1431,34 @@ function ProductDetails({product}){
     </section>
   );
 }
+/* ── PARÇA KİMLİĞİ ──
+   Ürün sayfasında lazerle kazınmış ahşap etiket görünümünde kimlik kartı. */
+function ProductIdentityTag({product}){
+  const mats=product.materials||[];
+  const wood=mats.find(m=>/ceviz|mese|kayin|disbudak|ahsap|akasya|zeytin|maun|ihlamur|ladin|kiraz|wood/.test(normalizeText(m)))||'';
+  const resin=mats.find(m=>/epoksi|recine|resin/.test(normalizeText(m)))||(product.colorNames?.[0]?`${product.colorNames[0]} epoksi`:'');
+  const rows=[
+    ['Ahşap',wood],
+    ['Epoksi',resin],
+    ['Ölçü',product.dimensions],
+    ['El işçiliği',product.craftTime],
+    ['Bitiş',product.finish],
+  ].filter(([,v])=>v);
+  const unique=/tekrarlanmaz|tek parca|tek parça|uretilemez|üretilemez/.test(normalizeText(product.repeatable||''));
+  return (
+    <aside className="pdxTag" aria-label="Parça kimliği">
+      <div className="pdxTagHead">
+        <small>PARÇA KİMLİĞİ</small>
+        <b>{certificateNo(product)}</b>
+      </div>
+      {rows.length>0&&<dl>{rows.map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>}
+      <div className="pdxTagFoot">
+        <span>{unique?'Bu parça tektir; aynı desen bir daha oluşmaz.':(product.repeatable||'Atölyede elde üretilir.')}</span>
+        <i className="pdxSeal" aria-hidden="true"><em>R</em><small>EL YAPIMI</small></i>
+      </div>
+    </aside>
+  );
+}
 /* ── ÜRÜN KARTI ── */
 function ProductCard({p, add, onDetail, allReviews, favorites, toggleFav}){
   const reviews=reviewList(allReviews, p.id);
@@ -1446,6 +1476,7 @@ function ProductCard({p, add, onDetail, allReviews, favorites, toggleFav}){
       {cardZoom&&createPortal(<ZoomLightbox images={cardGallery} index={cardZoomIdx} alt={p.title} onIndex={setCardZoomIdx} onClose={()=>setCardZoom(false)}/>,document.body)}
       <div className="photoWrap">
         <img className="cardImg primaryImg" src={p.image} alt={p.title} loading="lazy"/>
+        {cardGallery[1]&&cardGallery[1]!==p.image&&<img className="cardImg hoverImg" src={cardGallery[1]} alt="" aria-hidden="true" loading="lazy" decoding="async"/>}
         <div className="cardBadges"><small>{p.tag}</small></div>
         {status.archive&&<div className="archiveVeil"><span>Satıldı</span></div>}
         {toggleFav&&<button className={`cardFavBtn${isFav?' favActive':''}`} onClick={e=>{e.stopPropagation();toggleFav(p.id);}} aria-label="Favorilere ekle">{isFav?'♥':'♡'}</button>}
@@ -1494,6 +1525,7 @@ function GalleryCard({p, add, onDetail, allReviews, favorites, toggleFav, index}
       {gz&&createPortal(<ZoomLightbox images={gallery} index={gzIdx} alt={p.title} onIndex={setGzIdx} onClose={()=>setGz(false)}/>,document.body)}
       <div className="galleryCardImg" onClick={()=>onDetail(p)} style={{cursor:'pointer'}}>
         <img src={p.image} alt={p.title} loading={index<6?'eager':'lazy'} decoding="async"/>
+        {gallery[1]&&gallery[1]!==p.image&&<img className="hoverImg" src={gallery[1]} alt="" aria-hidden="true" loading="lazy" decoding="async"/>}
         {status.archive && <div className="galleryVeil"><span>Satıldı</span></div>}
         <div className="galleryCardBadge">{p.tag}</div>
         <div className="galleryZoomHint" onClick={e=>{e.stopPropagation();setGzIdx(0);setGz(true);}} style={{cursor:'zoom-in',pointerEvents:'all'}}><IZoom/> Yakınlaştır</div>
@@ -2142,6 +2174,36 @@ function FavoritesPage({products, favorites, add, goProduct, allReviews, toggleF
     </main>
   );
 }
+/* ── 404 ── */
+function NotFoundPage({go}){
+  const isProduct=window.location.pathname.startsWith('/urun/');
+  return (
+    <main className="page nfPage">
+      <section className="nfBox reveal in">
+        <svg className="nfArt" viewBox="0 0 220 120" width="220" height="120" aria-hidden="true">
+          <defs>
+            <linearGradient id="nfWood" x1="0" x2="1"><stop offset="0" stopColor="#CBA273"/><stop offset="1" stopColor="#A87749"/></linearGradient>
+            <linearGradient id="nfResin" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#23977A"/><stop offset="1" stopColor="#0B5442"/></linearGradient>
+          </defs>
+          <rect x="10" y="70" width="200" height="36" rx="7" fill="url(#nfWood)"/>
+          <path d="M92 70c10 9 4 22 16 36h24c-11-13-5-26-15-36z" fill="url(#nfResin)"/>
+          <path d="M22 81c26-4 46 5 66 1M136 84c22-6 44 4 64-2M24 95c22-4 44 4 66 0M138 97c22-4 42 3 62-1" stroke="#6E4A2C" strokeOpacity=".35" fill="none" strokeWidth="1.4" strokeLinecap="round"/>
+          <path d="M152 60c-19 0-27-15-18-25 7-9 23-6 23 5 0 8-10 10-13 4" fill="none" stroke="#C99D6B" strokeWidth="5" strokeLinecap="round"/>
+          <path d="M60 61c15-2 21-13 14-20-6-6-17-2-15 6" fill="none" stroke="#B5864F" strokeWidth="4" strokeLinecap="round"/>
+        </svg>
+        <p>404 · ATÖLYE KAYITLARI</p>
+        <h1>{isProduct?<>Bu parça artık<br/><em>koleksiyonda değil.</em></>:<>Bu parça<br/><em>atölyeden çıkmamış.</em></>}</h1>
+        <span>{isProduct?'Satılmış ya da koleksiyondan kaldırılmış olabilir. Benzerini birlikte tasarlayabiliriz.':'Aradığınız sayfa taşınmış ya da hiç var olmamış olabilir. Koleksiyondaki tek parçalara göz atın.'}</span>
+        <div>
+          <button onClick={()=>go('collection')}>Koleksiyonu keşfet ↗</button>
+          {isProduct
+            ? <a href={`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent('Merhaba, sitede gördüğüm bir parçanın benzerini yaptırmak istiyorum.')}`} target="_blank" rel="noreferrer">Benzerini sor</a>
+            : <button className="nfGhost" onClick={()=>go('home')}>Ana sayfa</button>}
+        </div>
+      </section>
+    </main>
+  );
+}
 /* ── SİPARİŞ TAKİBİ ── */
 // Müşteri, sipariş numarası + telefonunun son 4 hanesiyle siparişinin durumunu görür.
 // Bu cihazdan verilen siparişler hatırlanır; tek dokunuşla sorgulanabilir.
@@ -2151,6 +2213,18 @@ function rememberMyOrder(orderNo, phone){
   if(!orderNo||last4.length<4)return;
   const list=(Array.isArray(readStored(MY_ORDERS_KEY,[]))?readStored(MY_ORDERS_KEY,[]):[]).filter(x=>x&&x.orderNo!==orderNo);
   writeStored(MY_ORDERS_KEY,[{orderNo,last4,at:new Date().toISOString()},...list].slice(0,6));
+}
+// Her adımın atölyeye özgü simgesi: sipariş fişi, onay mührü, epoksi dökümü, paket, kargo, ev.
+const TRACK_ICONS={
+  pending:<><path d="M9 3.5h6v3H9z"/><path d="M7.5 5H5v15.5h14V5h-2.5"/><path d="M8.5 11h7M8.5 14.5h7M8.5 18h4"/></>,
+  approved:<><circle cx="12" cy="9.5" r="5.8"/><path d="M9.4 9.6l1.8 1.8 3.5-3.6"/><path d="M8.6 14.4 7 21l5-2.6 5 2.6-1.6-6.6"/></>,
+  production:<><path d="M12 2.8c2.6 3.3 4.1 5.7 4.1 7.7a4.1 4.1 0 0 1-8.2 0c0-2 1.5-4.4 4.1-7.7z"/><path d="M3 21h18M5.5 17.5h13"/></>,
+  packing:<><path d="M3 7.8 12 3.6l9 4.2v8.9L12 21l-9-4.3z"/><path d="M3 7.8l9 4.3 9-4.3M12 12.1V21"/></>,
+  cargo:<><path d="M2.5 6h11.5v10.5H2.5z"/><path d="M14 9.5h4.2l3.3 3.4v3.6H14"/><circle cx="6.5" cy="18" r="1.9"/><circle cx="17.5" cy="18" r="1.9"/></>,
+  delivered:<><path d="M3.5 11 12 3.8l8.5 7.2v9.5h-17z"/><path d="M12 18l-2.7-2.6a1.7 1.7 0 0 1 2.7-2 1.7 1.7 0 0 1 2.7 2z"/></>,
+};
+function TrackIcon({k}){
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{TRACK_ICONS[k]}</svg>;
 }
 const TRACK_STEPS=[
   ['pending','Sipariş alındı','Siparişiniz atölyeye ulaştı.'],
@@ -2219,7 +2293,7 @@ function TrackPage({go}){
               <ol className="trkSteps">
                 {TRACK_STEPS.map(([key,label,desc],i)=>(
                   <li key={key} className={i<current?'past':i===current?'now':''}>
-                    <i aria-hidden="true">{i<=current?<ICheck/>:i+1}</i>
+                    <i aria-hidden="true"><TrackIcon k={key}/></i>
                     <div><b>{label}</b><small>{i<=current?(whenOf(key)||desc):desc}</small></div>
                   </li>
                 ))}
@@ -2612,7 +2686,7 @@ function parseInitialRoute(products){
   const slug = path.replace(/^\//,'');
   const page = SLUG_TO_PAGE[slug];
   if(page) return {page, product:null};
-  return {page:'home', product:null};
+  return {page:'notfound', product:null};
 }
 class ErrorBoundary extends React.Component{
   constructor(props){super(props);this.state={hasError:false};}
@@ -2720,7 +2794,7 @@ function App(){
     const onPop=e=>{
       const st=e.state || parseInitialRoute(products);
       const product=st.productId?products.find(p=>p.id===st.productId):st.product;
-      if((st.page||'home')==='product' && !product){ go('collection', null, false); return; }
+      if((st.page||'home')==='product' && !product){ go('notfound', null, false); return; }
       go(st.page||'home', product, false);
     };
     window.addEventListener('popstate',onPop);
@@ -2734,8 +2808,7 @@ function App(){
     if(found){ setCurrentProduct(found); setPendingProductId(null); return; }
     if(catalogReady){
       setPendingProductId(null);
-      window.history.replaceState({page:'collection', productId:null}, '', pagePath('collection'));
-      go('collection', null, false);
+      setPage('notfound');
     }
   },[pendingProductId,products,catalogReady,go]);
   // Sepet/favoriler katalog gelmeden yazılmaz: aksi halde henüz yüklenmemiş
@@ -2830,6 +2903,7 @@ function App(){
       {page==='story'&&<StoryPage go={go}/>}
       {page==='contact'&&<ContactPage settings={siteSettings}/>}
       {page==='track'&&<TrackPage go={go}/>}
+      {page==='notfound'&&<NotFoundPage go={go}/>}
       {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go}/>}
       {page==='product'&&!currentProduct&&<main className="page productDetailPage"><p className="pageLoading">Ürün yükleniyor…</p></main>}
       {page==='product'&&currentProduct&&<ProductDetailPage product={currentProduct} go={go} add={add} allReviews={allReviews} setAllReviews={setAllReviews} favorites={favorites} toggleFav={toggleFav} products={products} recentIds={recentIds} settings={siteSettings}/>}
@@ -2868,6 +2942,13 @@ if (window.location.pathname.startsWith('/admin')) {
   const muteSiteCss = () => document.querySelectorAll(SITE_CSS).forEach(el => { if (el.media !== 'not all') el.media = 'not all'; });
   muteSiteCss();
   new MutationObserver(muteSiteCss).observe(document.head, { childList: true });
+  // Panel telefonda ana ekrana eklenince uygulama gibi açılsın (kendi adı ve simgesiyle).
+  const headTag = (tag, attrs) => { const el = document.createElement(tag); Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v)); document.head.appendChild(el); };
+  headTag('link', { rel: 'manifest', href: '/admin.webmanifest' });
+  document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(el => el.setAttribute('href', '/admin-icon-180.png'));
+  headTag('meta', { name: 'apple-mobile-web-app-capable', content: 'yes' });
+  headTag('meta', { name: 'mobile-web-app-capable', content: 'yes' });
+  headTag('meta', { name: 'apple-mobile-web-app-title', content: 'Ravun Panel' });
   import('./admin/main.tsx')
     .then(({ mountAdminApp }) => mountAdminApp(rootEl))
     .catch(err => {
