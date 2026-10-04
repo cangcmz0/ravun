@@ -119,6 +119,7 @@ export function OrderDetailDialog({ open, onOpenChange, order, onSave, msgConfig
             <div className='space-y-1.5'>
               <Label>Müşteri</Label>
               <div className='rounded-md border px-3 py-2 text-sm'>{order.customerName || '—'}</div>
+              {order.customerEmail && <p className='text-muted-foreground text-xs'>Google hesabı: {order.customerEmail}</p>}
             </div>
             <div className='space-y-1.5'>
               <Label>Telefon</Label>
