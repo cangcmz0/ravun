@@ -82,6 +82,18 @@ CREATE TABLE IF NOT EXISTS images (
   data bytea NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS customers (
+  id bigserial PRIMARY KEY,
+  google_sub text UNIQUE NOT NULL,
+  email text NOT NULL,
+  name text NOT NULL,
+  picture text,
+  phone text,
+  favorites jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_login_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS orders_customer_idx ON orders ((data->>'customerId'));
 CREATE TABLE IF NOT EXISTS rate_limits (
   key text PRIMARY KEY,
   count integer NOT NULL,

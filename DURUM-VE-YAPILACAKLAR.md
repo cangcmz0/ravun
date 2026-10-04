@@ -23,7 +23,7 @@ PostgreSQL (Vercel'de Neon, VPS'te kendi Postgres'iniz)
 ```
 
 Veritabanında: `products`, `settings`, `orders`, `reviews`, `messages`,
-`images` (ürün görselleri), `rate_limits`. Tablolar ilk istekte otomatik
+`images` (ürün görselleri), `customers` (Google ile giriş yapan müşteriler), `rate_limits`. Tablolar ilk istekte otomatik
 oluşturulur; ilk kurulumda `src/data/products.json` ürünleri ve örnek
 yorumlar bir kez yüklenir.
 
@@ -35,6 +35,8 @@ yorumlar bir kez yüklenir.
 | Son katalog | Tarayıcı önbelleği (hızlı açılış için; her açılışta sunucudan yenilenir) |
 
 ### API uçları
+- Müşteri hesabı: `GET /api/auth/google/start|callback`, `GET /api/me`,
+  `PUT /api/me/favorites`, `GET /api/me/orders`, `POST /api/me/claim|logout|delete`
 - Herkese açık: `GET /api/catalog`, `POST /api/orders`, `POST /api/orders/track`,
   `POST /api/reviews`, `POST /api/reviews/:id/helpful`, `POST /api/messages`,
   `GET /api/images/:id`, `GET /api/health`
@@ -116,6 +118,45 @@ yorumlar bir kez yüklenir.
 - **Telefonda uygulama gibi:** Panel ana ekrana eklenebilir (`/admin.webmanifest`,
   "Ravun Panel" adı ve simgesi). Telefonda panelde bir kez öneri kartı çıkar.
 
+## Görsel kimlik: Ceviz & Zümrüt
+- Üç ana renk: ceviz (koyu kahve), zümrüt epoksi (yeşil), krem. Mercan yalnızca
+  "Sipariş Ver", "İletişime Geç" ve favori kalbinde.
+- Üst etiketler zümrüt ve başında ince reçine çizgisi; başlıklardaki italik vurgular
+  reçine parıltılı zümrüt; yıldızlar bal rengi.
+- Kayan yazı bandı akan zümrüt epoksi şeridi; footer sade koyu ceviz.
+- Hepsi `src/style.css` sonundaki "CEVİZ & ZÜMRÜT" bloğunda; geri almak için o blok
+  silinebilir.
+
+## Müşteri hesabı: Google ile giriş
+Müşteri isterse Google hesabıyla giriş yapar (şifre yok). Giriş zorunlu değil;
+üye olmadan sipariş her zaman açık.
+- **Hesabım** (`/hesabim`): siparişler ve durum adımları, favori sayısı, çıkış,
+  hesabı silme (siparişler atölyede kalır, hesapla bağı kopar).
+- **Favoriler** giriş yapınca hesaba kaydedilir; telefonda ve bilgisayarda aynı
+  görünür (cihazdaki favoriler girişte hesaptakilerle birleşir).
+- Giriş yapmışken verilen siparişler hesaba bağlanır; o cihazdan daha önce verilmiş
+  siparişler de girişte otomatik bağlanır. Sepette ad ve telefon hazır gelir.
+- Panelde sipariş detayında "Google hesabı: …" görünür.
+- Akış tamamen sunucuda; sitede Google betiği çalışmaz, gizli anahtar tarayıcıya gitmez.
+- `GOOGLE_CLIENT_ID` ve `GOOGLE_CLIENT_SECRET` tanımlı değilse sitede hiçbir giriş
+  düğmesi görünmez.
+
+**Kurulum (bir kez):**
+1. https://console.cloud.google.com → üstten yeni proje oluştur (ör. "Ravun").
+2. **Google Auth Platform** (eski adıyla "OAuth consent screen") → Başlayın:
+   uygulama adı "Ravun", destek e-postası, kitle **Harici (External)**.
+3. **Kitle (Audience)** → uygulamayı **Yayınla (Publish app)** — "Test" modunda
+   yalnızca eklenen test kullanıcıları giriş yapabilir. (Ad, e-posta ve profil
+   fotoğrafı dışında izin istenmediği için Google incelemesi gerekmez.)
+4. **İstemciler (Clients)** → İstemci oluştur → **Web uygulaması** →
+   **Yetkili yönlendirme URI'leri**:
+   - `https://ravun-tau.vercel.app/api/auth/google/callback`
+   - `https://ravun-git-claude-clever-pascal-x6xs7m-cangcmz0-s-projects.vercel.app/api/auth/google/callback`
+   - (kendi alan adınız olunca: `https://ALANADI/api/auth/google/callback`)
+5. Verilen **İstemci kimliği** ve **İstemci gizli anahtarı**nı Vercel → Settings →
+   Environment Variables'a `GOOGLE_CLIENT_ID` ve `GOOGLE_CLIENT_SECRET` olarak
+   (Production + Preview) ekle → Redeploy.
+
 ## Vercel kurulumu (bir kez)
 
 1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →
@@ -179,4 +220,7 @@ npm run dev               # site + panel + API birlikte (Vite içinde)
 - Sipariş durumu değişince müşteriye mesaj otomatik gitmiyor; panelde hazır
   WhatsApp mesajı tek tıkla gönderiliyor (WhatsApp Business API ücretli olduğu için).
 - Online ödeme yok; ödeme WhatsApp üzerinden konuşuluyor.
-- Kök dizindeki `style.css` sitede kullanılmıyor (asıl dosya `src/style.css`).
+- Telefonla (SMS kodu) giriş yok; SMS firması hesabı açılınca otomatik sipariş
+  mesajlarıyla birlikte eklenecek.
+- KVKK: müşteri hesabı ad ve e-posta saklıyor; gizlilik/aydınlatma metni sitede
+  henüz yok, eklenmeli.

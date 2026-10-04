@@ -14,6 +14,10 @@ import {
   sanitizeContactInput, categoryKey, ORDER_STATUS_KEYS,
 } from './sanitize.js'
 import {
+  googleConfigured, startLogin, finishLogin, clearStateCookie, customerCookie, clearCustomerCookie,
+  customerId, loadCustomer, publicCustomer,
+} from './customer.js'
+import {
   loadNotify, saveNotify, sanitizeNotify, publicNotify, sendTelegram, detectChats,
   notifyEvent, orderMessage, reviewMessage, contactMessage, siteOrigin,
 } from './notify.js'
@@ -138,6 +142,11 @@ async function createOrder(req) {
     }
     if (!lines.length) return fail(409, 'Sepetteki ürünler artık satışta değil.')
     const total = lines.reduce((s, l) => s + l.price * l.qty, 0)
+    // Giriş yapmış müşterinin siparişi hesabına bağlanır ("Hesabım → Siparişlerim").
+    const cust = await loadCustomer(client, await customerId(req))
+    if (cust && !cust.phone && cleanText(body.customerPhone, 30)) {
+      await client.query('UPDATE customers SET phone = $2 WHERE id = $1', [cust.id, cleanText(body.customerPhone, 30)])
+    }
     const data = {
       items: lines,
       total,
@@ -147,6 +156,7 @@ async function createOrder(req) {
       cargoCode: '',
       source: 'site',
       history: [{ status: 'pending', at: new Date().toISOString() }],
+      ...(cust ? { customerId: String(cust.id), customerEmail: cust.email } : {}),
     }
     let orderNo = makeOrderNo()
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -185,12 +195,14 @@ async function trackOrder(req) {
   if (!row || stored.length < 4 || stored.slice(-4) !== phone.slice(-4)) {
     return fail(404, 'Bu bilgilerle eşleşen sipariş bulunamadı. Sipariş numarasını ve telefonu kontrol edin.')
   }
-  const o = orderRow(row)
-  const cfg = await loadNotify(p)
+  return json(200, { order: publicOrder(orderRow(row), await loadNotify(p)) }, NO_STORE)
+}
+
+// Müşteriye gösterilen sipariş bilgisi (ad/telefon/not gibi kişisel alanlar hariç).
+function publicOrder(o, cfg) {
   const code = o.cargoCode || ''
   const tpl = cfg.cargoTrackUrl || ''
-  return json(200, {
-    order: {
+  return {
       orderNo: o.orderNo,
       status: o.status,
       createdAt: o.createdAt,
@@ -211,8 +223,81 @@ async function trackOrder(req) {
         selectedColor: it.selectedColor,
         giftWrap: Boolean(it.giftWrap),
       })),
-    },
-  }, NO_STORE)
+  }
+}
+
+// ── MÜŞTERİ HESABI ──
+const redirect = (location, cookies = []) => ({ status: 302, headers: { Location: location, 'Cache-Control': 'no-store', ...(cookies.length ? { 'Set-Cookie': cookies } : {}) }, body: '' })
+
+async function customerRoute(req, seg) {
+  const m = req.method
+  // /api/auth/google/start  ·  /api/auth/google/callback
+  if (seg[0] === 'auth' && seg[1] === 'google' && m === 'GET') {
+    if (!googleConfigured()) return redirect('/hesabim?giris=kapali')
+    const origin = siteOrigin(req)
+    if (seg[2] === 'start') {
+      const { location, cookie } = startLogin(req, origin)
+      return redirect(location, [cookie])
+    }
+    if (seg[2] === 'callback') {
+      const r = await finishLogin(req, origin)
+      if (!r.ok) return redirect(`${r.back || '/hesabim'}${(r.back || '').includes('?') ? '&' : '?'}giris=${r.reason}`, [clearStateCookie(req.secure)])
+      return redirect(r.back, [await customerCookie(r.id, req.secure), clearStateCookie(req.secure)])
+    }
+  }
+  if (seg[0] !== 'me') return null
+  const p = await db()
+  const id = await customerId(req)
+  const cust = await loadCustomer(p, id)
+
+  if (m === 'GET' && !seg[1]) {
+    return json(200, { available: googleConfigured(), customer: publicCustomer(cust), favorites: cust ? cust.favorites : [] }, NO_STORE)
+  }
+  if (seg[1] === 'logout' && m === 'POST') return json(200, { ok: true }, { 'Set-Cookie': clearCustomerCookie(req.secure), ...NO_STORE })
+  if (!cust) return json(401, { error: 'Giriş yapmanız gerekiyor.' }, { ...NO_STORE, ...(id ? { 'Set-Cookie': clearCustomerCookie(req.secure) } : {}) })
+
+  if (seg[1] === 'favorites' && m === 'PUT') {
+    const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map((x) => Math.round(Number(x))).filter((n) => Number.isFinite(n) && n > 0))].slice(0, 200)
+    await p.query('UPDATE customers SET favorites = $2 WHERE id = $1', [cust.id, JSON.stringify(ids)])
+    return json(200, { favorites: ids }, NO_STORE)
+  }
+  if (seg[1] === 'orders' && m === 'GET') {
+    const [{ rows }, cfg] = await Promise.all([
+      p.query("SELECT * FROM orders WHERE data->>'customerId' = $1 ORDER BY created_at DESC LIMIT 100", [String(cust.id)]),
+      loadNotify(p),
+    ])
+    return json(200, { orders: rows.map((r) => publicOrder(orderRow(r), cfg)) }, NO_STORE)
+  }
+  // Bu cihazdan verilmiş (sipariş no + telefonun son 4 hanesi bilinen) siparişleri hesaba bağlar.
+  if (seg[1] === 'claim' && m === 'POST') {
+    const rl = await rateLimit(`claim:${req.ip}`, 20, 10 * 60 * 1000)
+    if (!rl.ok) return fail(429, 'Çok fazla deneme.', { retryAfter: rl.retryAfter })
+    let claimed = 0
+    for (const it of (Array.isArray(req.body?.orders) ? req.body.orders : []).slice(0, 10)) {
+      const no = compactNo(it?.orderNo).slice(0, 40)
+      const last4 = String(it?.last4 || '').replace(/\D/g, '').slice(-4)
+      if (no.length < 6 || last4.length < 4) continue
+      const r = await p.query(
+        `UPDATE orders SET data = data || $3::jsonb
+         WHERE regexp_replace(upper(order_no), '[^A-Z0-9]', '', 'g') = $1
+           AND right(regexp_replace(coalesce(data->>'customerPhone', ''), '\\D', '', 'g'), 4) = $2
+           AND coalesce(data->>'customerId', '') = ''`,
+        [no, last4, { customerId: String(cust.id), customerEmail: cust.email }],
+      )
+      claimed += r.rowCount
+    }
+    return json(200, { claimed }, NO_STORE)
+  }
+  // Hesabı sil: müşteri kaydı silinir, siparişler kalır ama hesapla bağı kopar.
+  if (seg[1] === 'delete' && m === 'POST') {
+    if (req.body?.confirm !== true) return fail(400, 'Onay gerekli.')
+    await tx(async (c) => {
+      await c.query("UPDATE orders SET data = data - 'customerId' - 'customerEmail' WHERE data->>'customerId' = $1", [String(cust.id)])
+      await c.query('DELETE FROM customers WHERE id = $1', [cust.id])
+    })
+    return json(200, { ok: true }, { 'Set-Cookie': clearCustomerCookie(req.secure), ...NO_STORE })
+  }
+  return fail(404, 'Bulunamadı')
 }
 
 async function createReview(req) {
@@ -687,6 +772,10 @@ export async function route(req) {
     if (seg[0] === 'catalog' && m === 'GET') return await getCatalog()
     if (seg[0] === 'orders' && m === 'POST' && seg.length === 1) return await createOrder(req)
     if (seg[0] === 'orders' && seg[1] === 'track' && m === 'POST') return await trackOrder(req)
+    if (seg[0] === 'auth' || seg[0] === 'me') {
+      const r = await customerRoute(req, seg)
+      if (r) return r
+    }
     if (seg[0] === 'reviews' && m === 'POST' && seg.length === 1) return await createReview(req)
     if (seg[0] === 'reviews' && seg[2] === 'helpful' && m === 'POST') return await markHelpful(req, seg[1])
     if (seg[0] === 'messages' && m === 'POST' && seg.length === 1) return await createMessage(req)

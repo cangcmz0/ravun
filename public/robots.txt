@@ -1,3 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /api/
+Disallow: /hesabim
+Disallow: /siparis-takip
 Sitemap: https://ravun-tau.vercel.app/sitemap.xml

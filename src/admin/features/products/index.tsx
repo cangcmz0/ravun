@@ -246,7 +246,7 @@ export function Products() {
             <p className='text-destructive py-10 text-center text-sm'>{loadError}</p>
           ) : filtered.length === 0 ? (
             <p className='text-muted-foreground py-10 text-center text-sm'>Ürün bulunamadı.</p>
-          ) : filtered.map((p, i) => {
+          ) : filtered.map((p) => {
             const meta = PRODUCT_STATUS[normalizeProductStatus(p.status, p)]
             return (
               <SortableItem key={p.id} id={p.id} disabled={!canReorder} className={`rounded-lg border bg-card p-3 ${selected.includes(p.id) ? 'ring-2 ring-primary' : ''}`}>
@@ -317,7 +317,7 @@ export function Products() {
                 <TableRow><TableCell colSpan={9} className='text-destructive py-10 text-center'>{loadError}</TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={9} className='text-muted-foreground py-10 text-center'>Ürün bulunamadı.</TableCell></TableRow>
-              ) : filtered.map((p, i) => {
+              ) : filtered.map((p) => {
                 const key = normalizeProductStatus(p.status, p)
                 const meta = PRODUCT_STATUS[key]
                 return (

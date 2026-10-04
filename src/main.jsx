@@ -143,15 +143,12 @@ function categoryLabelFromKey(key, fallback='') {
   };
   return labels[key] || fallback || key.split('-').map(x => x ? x[0].toLocaleUpperCase('tr-TR') + x.slice(1) : x).join(' ');
 }
-function sameCategory(a, b) {
-  if (categoryKey(b) === 'tum') return true;
-  return categoryKey(a) === categoryKey(b);
-}
+// Kategori sayfası metinleri: panelde düzenlenen (Site ayarları → Kategoriler) yoksa varsayılan.
 function categoryDetail(key, settings) {
   const normalized = categoryKey(key);
   const managed = settings?.categorySettings?.[normalized];
-  const fallback = CATEGORY_DETAILS[normalized] || CATEGORY_DETAILS.tum;
-  return {...fallback, ...(managed && typeof managed === 'object' ? managed : {})};
+  const fallback = CATEGORY_DETAILS[normalized] || { ...CATEGORY_DETAILS.tum, eyebrow: categoryLabelFromKey(normalized).toLocaleUpperCase('tr-TR'), title: categoryLabelFromKey(normalized), desc: '' };
+  return {...fallback, ...(managed && typeof managed === 'object' ? Object.fromEntries(Object.entries(managed).filter(([,v])=>v)) : {})};
 }
 /* ── V90–V94: ÜRÜN DURUMU, ARŞİV, HEDİYE, WHATSAPP VE BAKIM ── */
 const PRODUCT_STATUS = {
@@ -393,6 +390,18 @@ async function apiPost(path, body) {
   if (!res.ok) throw new Error(data?.error || 'İşlem tamamlanamadı.');
   return data;
 }
+// Müşteri hesabı uçları için: GET/PUT/POST, çerez aynı sitede otomatik gider.
+async function apiJson(path, {method='GET', body}={}) {
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {method, credentials:'same-origin', headers: body!==undefined?{'Content-Type':'application/json'}:{}, body: body!==undefined?JSON.stringify(body):undefined});
+  } catch {
+    throw new Error('Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edin.');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(data?.error || 'İşlem tamamlanamadı.'); e.status = res.status; throw e; }
+  return data;
+}
 function readStored(key, fallback) {
   try {
     const raw = localStorage.getItem(_sk(key));
@@ -602,30 +611,7 @@ function normalizeCart(value, products = INITIAL_PRODUCTS, giftPrice = DEFAULT_S
    fiyatı sonradan değişince geçmiş siparişin tutarı da değişiyordu. Site her
    açıldığında bu sonucu geri yazdığı için admin panelindeki sipariş kayıtları
    bozuluyordu. Admin tarafındaki normalizeCartForOrder ile aynı kural. */
-function normalizeOrderItems(value) {
-  if (!Array.isArray(value)) return [];
-  return value.slice(0, 200).filter(Boolean).map(item => ({
-    ...item,
-    title: cleanText(item?.title || '', 120),
-    price: safeNumber(item?.price, 0, 0, 10_000_000),
-    qty: safeNumber(item?.qty, 1, 1, 99),
-    image: safeImageSrc(item?.image, `${A}products_hero-1.webp`)
-  }));
-}
-function normalizeOrders(value) {
-  return Array.isArray(value) ? value.slice(0, 5000).filter(Boolean).map(o => ({
-    ...o,
-    id: o?.id ?? Date.now(),
-    orderNo: cleanText(o?.orderNo || `RVN-${Date.now()}`, 40),
-    status: cleanText(o?.status || 'pending', 40),
-    customerName: cleanText(o?.customerName || '', 90),
-    customerPhone: cleanText(o?.customerPhone || '', 30),
-    cargoCode: cleanText(o?.cargoCode || o?.trackingCode || '', 80),
-    note: cleanText(o?.note || '', 500),
-    items: normalizeOrderItems(o?.items || [])
-  })) : [];
-}
-const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim', favorites:'favoriler', track:'siparis-takip' };
+const PAGE_SLUGS = { collection:'koleksiyon', story:'hikaye', contact:'iletisim', favorites:'favoriler', track:'siparis-takip', account:'hesabim' };
 const SLUG_TO_PAGE = Object.fromEntries(Object.entries(PAGE_SLUGS).map(([k,v])=>[v,k]));
 function pagePath(page, product) {
   if (page === 'product' && product) return `/urun/${product.id}`;
@@ -732,12 +718,13 @@ function updateMeta(page, product) {
     : page === 'favorites' ? 'Favoriler | Ravun'
     : page === 'track' ? 'Sipariş Takibi | Ravun'
     : page === 'notfound' ? 'Sayfa bulunamadı | Ravun'
+    : page === 'account' ? 'Hesabım | Ravun'
     : 'Ravun | Ahşap & Epoksi Atölyesi';
   const description = metaDescriptionFor(page, product);
   const url = absoluteUrl(pagePath(page, product));
   const image = imageUrlForMeta(product?.image || '/assets/hero-1.webp');
   document.title = title;
-  setMetaTag('meta[name="robots"]','content', page === 'notfound' ? 'noindex' : 'index,follow');
+  setMetaTag('meta[name="robots"]','content', page === 'notfound' || page === 'account' ? 'noindex' : 'index,follow');
   setMetaTag('meta[name="description"]','content',description);
   setMetaTag('meta[name="theme-color"]','content','#F7F3E8');
   setMetaTag('meta[property="og:type"]','content',page === 'product' && product ? 'product' : 'website');
@@ -788,16 +775,14 @@ const IFilter=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" st
 const ITruck=()=><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>;
 const IZoom=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>;
 const IShare=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>;
-const IAdmin=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
+const IGoogle=()=><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>;
 const ICheck=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>;
 const IHand=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11V6.8a1.8 1.8 0 113.6 0V11"/><path d="M10.6 10V5.8a1.8 1.8 0 113.6 0V11"/><path d="M14.2 10.6V7.4a1.8 1.8 0 113.6 0v6.1c0 4.2-2.7 6.8-6.5 6.8H10c-2.1 0-3.8-.9-5-2.5l-2.1-2.9a1.9 1.9 0 013-2.3l1.1 1.2"/><path d="M7 15.2V11"/></svg>;
 const ILeaf=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20.5 3.5C13.5 3.8 6.8 7.2 5 13.2c-1 3.4.9 6.1 4.2 6.1 6.1 0 10.2-7.1 11.3-15.8z"/><path d="M4 20c3.8-6.2 8.2-9.7 14-12"/></svg>;
 const IBox=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 3.7 7.5 12 12l8.3-4.5L12 3z"/><path d="M3.7 7.5V16.5L12 21l8.3-4.5v-9"/><path d="M12 12v9"/><path d="M8 5.2l8.3 4.5"/></svg>;
 const ICustom=()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l2.4 5 5.4.8-3.9 3.8.9 5.4L12 15.5 7.2 18l.9-5.4-3.9-3.8 5.4-.8L12 3z"/><path d="M12 8.8v3.4l2.6 1.5"/></svg>;
 const ITrash=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>;
-const IEye=({open})=>open?<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>;
 const IThumbUp=()=><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/><path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>;
-const IImage=()=><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>;
 const IChevron=({dir='right'})=><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{transform:dir==='left'?'rotate(180deg)':dir==='up'?'rotate(-90deg)':dir==='down'?'rotate(90deg)':'none'}}><polyline points="9 18 15 12 9 6"/></svg>;
 const IStar=()=><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>;
 /* ── STAR RATING ── */
@@ -1591,6 +1576,8 @@ function Collection({add, standalone=false, goProduct, products, allReviews, fav
     return ()=>clearTimeout(t);
   },[filterKey, filtered.length]);
   const selectCategory=key=>{ setFilterKey(key); };
+  // Bir kategori seçiliyken başlık alanı o kategorinin panelde girilen metinlerini gösterir.
+  const catInfo=filterKey!=='tum'?categoryDetail(filterKey, settings):null;
   if(!standalone){
     /* Ana sayfadaki inline küçük koleksiyon */
     return (
@@ -1615,15 +1602,16 @@ function Collection({add, standalone=false, goProduct, products, allReviews, fav
       <div className="collGalleryHero">
         <div className="collGalleryHeroInner">
           <div className="collGalleryHeroLeft">
-            <p className="collGalleryEyebrow">{settings?.collectionEyebrow || 'KOLEKSİYON'}</p>
+            <p className="collGalleryEyebrow">{catInfo?catInfo.eyebrow:(settings?.collectionEyebrow || 'KOLEKSİYON')}</p>
             <h1 className="collGalleryTitle">
-              {(settings?.collectionTitle || 'Atölyeden çıkan\nher parça.').split('\n').map((line,i)=>
+              {catInfo?<em>{catInfo.title}</em>:(settings?.collectionTitle || 'Atölyeden çıkan\nher parça.').split('\n').map((line,i)=>
                 <React.Fragment key={i}>{i===1?<em>{line}</em>:line}{i===0&&<br/>}</React.Fragment>
               )}
             </h1>
           </div>
           <div className="collGalleryHeroRight">
-            <p className="collGallerySubtitle">{settings?.collectionDesc || 'Özel üretim, sipariş üzerine. Her biri tek.'}</p>
+            {catInfo?.image&&<img className="collCatImg" src={catInfo.image} alt="" loading="lazy"/>}
+            <p className="collGallerySubtitle">{catInfo?(catInfo.desc||settings?.collectionDesc||''):(settings?.collectionDesc || 'Özel üretim, sipariş üzerine. Her biri tek.')}</p>
             <div className="collGalleryCount"><strong>{filtered.length}</strong> parça</div>
           </div>
         </div>
@@ -1680,55 +1668,6 @@ function Collection({add, standalone=false, goProduct, products, allReviews, fav
       </div>
     </section>
   );
-}
-/* ── GEÇİCİ SİPARİŞ SİSTEMİ (VPS/DB ÖNCESİ LOCALSTORAGE) ── */
-const ORDER_STATUSES = [
-  ['pending','Beklemede'],
-  ['approved','Onaylandı'],
-  ['production','Üretimde'],
-  ['packing','Paketleniyor'],
-  ['cargo','Kargoda'],
-  ['delivered','Teslim edildi']
-];
-function makeOrderNo(){
-  const d=new Date();
-  const y=String(d.getFullYear()).slice(-2);
-  const m=String(d.getMonth()+1).padStart(2,'0');
-  const day=String(d.getDate()).padStart(2,'0');
-  const rand=Math.random().toString(36).slice(2,6).toUpperCase();
-  return `RVN-${y}${m}${day}-${rand}`;
-}
-function orderStatusLabel(status){
-  return ORDER_STATUSES.find(([k])=>k===status)?.[1] || 'Beklemede';
-}
-function orderTotal(order){
-  return (order.items||[]).reduce((s,x)=>s+(Number(x.price)||0)*(Number(x.qty)||1),0);
-}
-/* Yüklenen görseli localStorage kotasını korumak için sıkıştırır: max 2000px kenar, JPEG q=0.92 */
-function compressImageFile(file, {maxDim = 2000, quality = 0.92} = {}) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Dosya okunamadı'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Görsel işlenemedi'));
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = reader.result;
-    };
-    reader.readAsDataURL(file);
-  });
 }
 function Process(){
   return (
@@ -1969,9 +1908,13 @@ function Contact({settings}){
    2) Bilgiler: ad, telefon (zorunlu), not → "Siparişi tamamla"
    3) Onay: sipariş no + numarayı taşıyan WhatsApp butonu.
    Sipariş kaydı oluşturulamazsa müşteri yine WhatsApp ile sipariş verebilir. */
-function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCart, go}){
+function CartDrawer({open, cart, setOpen, inc, dec, remove, createOrder, clearCart, go, account}){
   const [step,setStep]=useState('cart');
   const [customer,setCustomer]=useState({name:'',phone:'',note:''});
+  // Giriş yapmış müşterinin adı ve (daha önce verdiği) telefonu hazır gelir.
+  useEffect(()=>{
+    if(open && account?.customer) setCustomer(c=>({...c, name:c.name||account.customer.name||'', phone:c.phone||account.customer.phone||''}));
+  },[open, account?.customer]);
   const [created,setCreated]=useState(null);
   const [busy,setBusy]=useState(false);
   const [orderError,setOrderError]=useState('');
@@ -2157,18 +2100,102 @@ function SearchOverlay({open, onClose, products, goProduct}){
   );
 }
 /* ── FAVORİLER SAYFASI ── */
-function FavoritesPage({products, favorites, add, goProduct, allReviews, toggleFav, go}){
+function FavoritesPage({products, favorites, add, goProduct, allReviews, toggleFav, go, account}){
   const favProducts=products.filter(p=>Array.isArray(favorites)&&favorites.includes(p.id)&&p.visible);
+  const synced=Boolean(account?.customer);
   return (
     <main className="page favoritesPage">
-      <section className="favoritesHero reveal"><p>FAVORİLER</p><h1>Beğendiğin<br/><em>parçalar.</em></h1><span>Kaydettiğin ürünler bu cihazda saklanır. Dilediğin zaman sepete ekleyebilir veya detayını inceleyebilirsin.</span></section>
+      <section className="favoritesHero reveal"><p>FAVORİLER</p><h1>Beğendiğin<br/><em>parçalar.</em></h1><span>{synced?'Favorilerin hesabına kaydediliyor; hangi cihazdan girersen gir burada.':'Kaydettiğin ürünler bu cihazda saklanır. Dilediğin zaman sepete ekleyebilir veya detayını inceleyebilirsin.'}</span></section>
       <section className="favoritesBody">
+        {account?.available&&!synced&&<div className="favLoginNote reveal"><span>Favorilerini telefonunda da bilgisayarında da görmek için giriş yap.</span><GoogleButton back="/favoriler" small/></div>}
         {favProducts.length===0?(
           <div className="favoritesEmpty reveal"><div><IHeart f={false}/></div><h2>Henüz favori ürün yok</h2><p>Koleksiyondaki kalp ikonlarına dokunarak sevdiğin parçaları burada toplayabilirsin.</p><button onClick={()=>go('collection')}>Koleksiyonu Keşfet ↗</button></div>
         ):(
           <div className="gridProducts collectionFull">
             {favProducts.map(p=><ProductCard key={p.id} p={p} add={add} onDetail={goProduct} allReviews={allReviews} favorites={favorites} toggleFav={toggleFav}/>) }
           </div>
+        )}
+      </section>
+    </main>
+  );
+}
+/* ── HESABIM ── */
+const LOGIN_FLAGS={hata:'Giriş tamamlanamadı. Lütfen tekrar deneyin.', iptal:'Giriş iptal edildi.', kapali:'Hesapla giriş şu an kapalı.'};
+const loginHref=(back='/hesabim')=>`/api/auth/google/start?return=${encodeURIComponent(back)}`;
+function GoogleButton({back, small}){
+  return <a className={`googleBtn${small?' sm':''}`} href={loginHref(back)}><IGoogle/> Google ile giriş yap</a>;
+}
+function AccountPage({account, go, favorites, onLogout, onDeleted}){
+  const [flag]=useState(()=>{try{return new URLSearchParams(window.location.search).get('giris')||'';}catch{return '';}});
+  const [orders,setOrders]=useState(null);
+  const [openNo,setOpenNo]=useState(null);
+  const [confirmDel,setConfirmDel]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState('');
+  useEffect(()=>{ if(flag){ try{window.history.replaceState(window.history.state,'','/hesabim');}catch{} } },[]);
+  useEffect(()=>{
+    if(!account.customer){setOrders(null);return;}
+    apiJson('/me/orders').then(d=>{setOrders(d.orders||[]);setOpenNo(d.orders?.[0]?.orderNo||null);}).catch(()=>setOrders([]));
+  },[account.customer]);
+  const statusLabel=o=>o.status==='cancelled'?'İptal edildi':(TRACK_STEPS.find(([k])=>k===o.status)?.[1]||'Sipariş alındı');
+  const del=async()=>{
+    setBusy(true);setErr('');
+    try{ await apiJson('/me/delete',{method:'POST',body:{confirm:true}}); onDeleted(); }
+    catch(e){ setErr(e.message); }
+    finally{ setBusy(false); }
+  };
+  const c=account.customer;
+  return (
+    <main className="page acctPage">
+      <section className="favoritesHero acctHero reveal"><p>HESABIM</p><h1>{c?<>Hoş geldin,<br/><em>{(c.name||'').split(' ')[0]}.</em></>:<>Ravun<br/><em>hesabın.</em></>}</h1><span>{c?'Siparişlerin ve favorilerin burada; hangi cihazdan girersen gir.':'Favorilerin ve siparişlerin her cihazda seninle.'}</span></section>
+      <section className="acctBody">
+        {flag&&LOGIN_FLAGS[flag]&&<p className="acctMsg" role="status">{LOGIN_FLAGS[flag]}</p>}
+        {!account.loaded?<p className="pageLoading">Yükleniyor…</p>
+        :!c?(
+          !account.available?<div className="acctCard"><h2>Giriş şu an kapalı</h2><p>Üye olmadan sipariş verebilir, siparişini <button className="linkBtn" onClick={()=>go('track')}>sipariş takibi</button> sayfasından izleyebilirsin.</p></div>:
+          <div className="acctCard acctLogin">
+            <ul className="acctPerks">
+              <li><IHeart f/> Favorilerin telefonda da bilgisayarda da aynı</li>
+              <li><ICart/> Siparişlerinin durumunu tek yerden izle</li>
+              <li><ICheck/> Bilgilerin bir sonraki siparişte hazır gelsin</li>
+            </ul>
+            <GoogleButton back="/hesabim"/>
+            <small>Şifre gerekmez. Adın ve e-posta adresin yalnızca hesabın için saklanır; hesabını dilediğin an silebilirsin. Üye olmadan da sipariş verebilirsin.</small>
+          </div>
+        ):(
+          <>
+            <div className="acctProfile">
+              {c.picture?<img src={c.picture} alt="" referrerPolicy="no-referrer"/>:<span className="acctAvatar">{(c.name||'R').charAt(0).toLocaleUpperCase('tr-TR')}</span>}
+              <div><b>{c.name}</b><small>{c.email}</small></div>
+              <button className="acctLogout" onClick={onLogout}>Çıkış yap</button>
+            </div>
+            <div className="acctTiles">
+              <button onClick={()=>go('favorites')}><IHeart f/><b>{(favorites||[]).length}</b><span>Favori parça</span></button>
+              <button onClick={()=>document.getElementById('acctOrders')?.scrollIntoView({behavior:'smooth',block:'start'})}><ICart/><b>{orders?orders.length:'—'}</b><span>Sipariş</span></button>
+            </div>
+            <h2 id="acctOrders" className="acctTitle">Siparişlerim</h2>
+            {orders===null?<p className="pageLoading">Yükleniyor…</p>
+            :orders.length===0?<div className="acctCard acctEmpty"><p>Bu hesapla verilmiş bir sipariş yok. Giriş yapmışken verdiğin siparişler burada görünür.</p><button className="acctCta" onClick={()=>go('collection')}>Koleksiyonu keşfet ↗</button></div>
+            :<div className="acctOrders">{orders.map(o=>(
+              <div key={o.orderNo} className={`acctOrder${openNo===o.orderNo?' open':''}`}>
+                <button className="acctOrderHead" onClick={()=>setOpenNo(openNo===o.orderNo?null:o.orderNo)} aria-expanded={openNo===o.orderNo}>
+                  <img src={o.items?.[0]?.image||`${A}products_hero-1.webp`} alt="" loading="lazy"/>
+                  <div><b>{o.items?.[0]?.title||'Sipariş'}{(o.items||[]).length>1?` +${o.items.length-1}`:''}</b><small>{o.orderNo} · {trackDate(o.createdAt)}</small></div>
+                  <span className={`trkBadge ${o.status==='cancelled'?'off':o.status==='delivered'?'done':''}`}>{statusLabel(o)}</span>
+                </button>
+                {openNo===o.orderNo&&<TrackResult order={o} go={go}/>}
+              </div>
+            ))}</div>}
+            <div className="acctDanger">
+              {!confirmDel?<button onClick={()=>setConfirmDel(true)}>Hesabımı sil</button>:(
+                <div>
+                  <p>Hesabın ve kayıtlı favori listen silinir. Verdiğin siparişler atölyede kayıtlı kalır ama bu hesapta görünmez.</p>
+                  <div><button className="danger" onClick={del} disabled={busy}>{busy?'Siliniyor…':'Evet, hesabımı sil'}</button><button onClick={()=>setConfirmDel(false)} disabled={busy}>Vazgeç</button></div>
+                  {err&&<p className="trkError">{err}</p>}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </section>
     </main>
@@ -2246,7 +2273,6 @@ function TrackPage({go}){
   const [order,setOrder]=useState(null);
   const [error,setError]=useState('');
   const [busy,setBusy]=useState(false);
-  const [copied,setCopied]=useState(false);
   const query=async(orderNo=no,ph=phone)=>{
     if(busy)return;
     const digits=String(ph||'').replace(/\D/g,'');
@@ -2262,15 +2288,6 @@ function TrackPage({go}){
   };
   // Bu cihazda kayıtlı bir sipariş ise sayfa açılır açılmaz göster.
   useEffect(()=>{ if(no&&String(phone).length>=4) query(); },[]);
-  const cancelled=order?.status==='cancelled';
-  const current=order?Math.max(0,TRACK_STEPS.findIndex(([k])=>k===order.status)):-1;
-  const whenOf=key=>{
-    const h=[...(order?.history||[])].reverse().find(x=>x?.status===key);
-    if(h)return trackDate(h.at);
-    return key==='pending'?trackDate(order?.createdAt):'';
-  };
-  const copyCode=()=>{try{navigator.clipboard?.writeText(order.cargoCode);setCopied(true);setTimeout(()=>setCopied(false),1600);}catch{}};
-  const waHelp=order?`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(`Merhaba, ${order.orderNo} numaralı siparişim hakkında yazıyorum.`)}`:`https://wa.me/${WA_NUMBER}`;
   return (
     <main className="page trackPage">
       <section className="favoritesHero trackHero reveal"><p>SİPARİŞ TAKİBİ</p><h1>Siparişin<br/><em>nerede?</em></h1><span>Sipariş numaranız ve siparişte verdiğiniz telefonun son 4 hanesiyle durumunu anında görün.</span></section>
@@ -2282,50 +2299,64 @@ function TrackPage({go}){
           {mine.length>0&&<div className="trkMine"><small>Bu cihazdaki siparişleriniz:</small>{mine.map(m=><button type="button" key={m.orderNo} className={order?.orderNo===m.orderNo?'on':''} onClick={()=>{setNo(m.orderNo);setPhone(m.last4);query(m.orderNo,m.last4);}}>{m.orderNo}</button>)}</div>}
           {error&&<p className="trkError" role="alert">{error}</p>}
         </form>
-        {order&&(
-          <article className="trkResult" aria-live="polite">
-            <header className="trkHead">
-              <div><small>Sipariş no</small><b>{order.orderNo}</b><span>{trackDate(order.createdAt)}</span></div>
-              <strong className={`trkBadge ${cancelled?'off':order.status==='delivered'?'done':''}`}>{cancelled?'İptal edildi':TRACK_STEPS[current]?.[1]}</strong>
-            </header>
-            {order.firstName&&<p className="trkHello">Merhaba {order.firstName}, {cancelled?'bu sipariş iptal edildi. Bir sorunuz varsa bize yazabilirsiniz.':order.status==='delivered'?'parçanız size ulaştı. Keyifle kullanın!':'siparişiniz özenle hazırlanıyor.'}</p>}
-            {!cancelled&&(
-              <ol className="trkSteps">
-                {TRACK_STEPS.map(([key,label,desc],i)=>(
-                  <li key={key} className={i<current?'past':i===current?'now':''}>
-                    <i aria-hidden="true"><TrackIcon k={key}/></i>
-                    <div><b>{label}</b><small>{i<=current?(whenOf(key)||desc):desc}</small></div>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {order.cargoCode&&(
-              <div className="trkCargo">
-                <div><small>{order.cargoCompany||'Kargo'} takip kodu</small><b>{order.cargoCode}</b></div>
-                <div className="trkCargoActions">
-                  <button type="button" onClick={copyCode}>{copied?'Kopyalandı ✓':'Kopyala'}</button>
-                  {order.cargoTrackUrl&&<a href={order.cargoTrackUrl} target="_blank" rel="noreferrer">Kargoyu takip et ↗</a>}
-                </div>
-              </div>
-            )}
-            <ul className="trkItems">
-              {(order.items||[]).map((it,i)=>(
-                <li key={i}>
-                  <img src={it.image||`${A}products_hero-1.webp`} alt="" loading="lazy"/>
-                  <div><b>{it.title}</b><small>{[it.selectedSize,it.selectedColor].filter(Boolean).join(' · ')}{it.giftWrap?' · Hediye paketi':''}</small></div>
-                  <span>{it.qty} × {money(it.price)}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="trkTotal"><span>Toplam</span><b>{money(order.total||0)}</b></div>
-            <div className="trkHelp">
-              <a href={waHelp} target="_blank" rel="noreferrer"><IWA/> Sorunuz mu var? WhatsApp'tan yazın</a>
-              <button type="button" onClick={()=>go('collection')}>Koleksiyona dön</button>
-            </div>
-          </article>
-        )}
+        {order&&<TrackResult order={order} go={go}/>}
       </section>
     </main>
+  );
+}
+// Sipariş durum kartı: takip sayfasında ve "Hesabım → Siparişlerim"de ortak.
+function TrackResult({order, go}){
+  const [copied,setCopied]=useState(false);
+  const cancelled=order?.status==='cancelled';
+  const current=order?Math.max(0,TRACK_STEPS.findIndex(([k])=>k===order.status)):-1;
+  const whenOf=key=>{
+    const h=[...(order?.history||[])].reverse().find(x=>x?.status===key);
+    if(h)return trackDate(h.at);
+    return key==='pending'?trackDate(order?.createdAt):'';
+  };
+  const copyCode=()=>{try{navigator.clipboard?.writeText(order.cargoCode);setCopied(true);setTimeout(()=>setCopied(false),1600);}catch{}};
+  const waHelp=`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(`Merhaba, ${order.orderNo} numaralı siparişim hakkında yazıyorum.`)}`;
+  return (
+    <article className="trkResult" aria-live="polite">
+      <header className="trkHead">
+        <div><small>Sipariş no</small><b>{order.orderNo}</b><span>{trackDate(order.createdAt)}</span></div>
+        <strong className={`trkBadge ${cancelled?'off':order.status==='delivered'?'done':''}`}>{cancelled?'İptal edildi':TRACK_STEPS[current]?.[1]}</strong>
+      </header>
+      {order.firstName&&<p className="trkHello">Merhaba {order.firstName}, {cancelled?'bu sipariş iptal edildi. Bir sorunuz varsa bize yazabilirsiniz.':order.status==='delivered'?'parçanız size ulaştı. Keyifle kullanın!':'siparişiniz özenle hazırlanıyor.'}</p>}
+      {!cancelled&&(
+        <ol className="trkSteps">
+          {TRACK_STEPS.map(([key,label,desc],i)=>(
+            <li key={key} className={i<current?'past':i===current?'now':''}>
+              <i aria-hidden="true"><TrackIcon k={key}/></i>
+              <div><b>{label}</b><small>{i<=current?(whenOf(key)||desc):desc}</small></div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {order.cargoCode&&(
+        <div className="trkCargo">
+          <div><small>{order.cargoCompany||'Kargo'} takip kodu</small><b>{order.cargoCode}</b></div>
+          <div className="trkCargoActions">
+            <button type="button" onClick={copyCode}>{copied?'Kopyalandı ✓':'Kopyala'}</button>
+            {order.cargoTrackUrl&&<a href={order.cargoTrackUrl} target="_blank" rel="noreferrer">Kargoyu takip et ↗</a>}
+          </div>
+        </div>
+      )}
+      <ul className="trkItems">
+        {(order.items||[]).map((it,i)=>(
+          <li key={i}>
+            <img src={it.image||`${A}products_hero-1.webp`} alt="" loading="lazy"/>
+            <div><b>{it.title}</b><small>{[it.selectedSize,it.selectedColor].filter(Boolean).join(' · ')}{it.giftWrap?' · Hediye paketi':''}</small></div>
+            <span>{it.qty} × {money(it.price)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="trkTotal"><span>Toplam</span><b>{money(order.total||0)}</b></div>
+      <div className="trkHelp">
+        <a href={waHelp} target="_blank" rel="noreferrer"><IWA/> Sorunuz mu var? WhatsApp'tan yazın</a>
+        <button type="button" onClick={()=>go('collection')}>Koleksiyona dön</button>
+      </div>
+    </article>
   );
 }
 /* ── MOBİL ALT MENÜ ── */
@@ -2377,7 +2408,7 @@ function Footer({go, settings, onAdmin}){
   );
 }
 /* ── HEADER ── */
-function Header({count, favCount, onCart, page, go, onSearch, settings, onNavToggle}){
+function Header({count, favCount, onCart, page, go, onSearch, settings, onNavToggle, account}){
   const [open,setOpenRaw]=useState(false);
   const [scrolled,setScrolled]=useState(false);
   // Not: body scroll kilidi App seviyesinde (navOpen) merkezi olarak yönetilir —
@@ -2409,9 +2440,13 @@ function Header({count, favCount, onCart, page, go, onSearch, settings, onNavTog
         <button className={page==='story'?'active':''} onClick={()=>nav('story')}>Hikaye</button>
         <button className={page==='contact'?'active':''} onClick={()=>nav('contact')}>İletişim</button>
         <button className={`navFavLink ${page==='favorites'?'active':''}`} onClick={()=>nav('favorites')}>Favoriler{favCount>0?` (${favCount})`:''}</button>
+        {account?.available&&<button className={`navFavLink navAcctLink ${page==='account'?'active':''}`} onClick={()=>nav('account')}>{account.customer?'Hesabım':'Giriş yap'}</button>}
       </nav>
       <div className="headActions">
         <button className={`cartRound favRound ${page==='favorites'?'active':''}`} onClick={()=>nav('favorites')} aria-label={favCount>0?`Favoriler (${favCount})`:'Favoriler'}><IHeart f={favCount>0}/>{favCount>0&&<b>{favCount}</b>}</button>
+        {account?.available&&<button className={`cartRound acctRound ${page==='account'?'active':''}`} onClick={()=>nav('account')} aria-label={account.customer?`Hesabım: ${account.customer.name}`:'Giriş yap'} title={account.customer?account.customer.name:'Giriş yap'}>
+          {account.customer?.picture?<img src={account.customer.picture} alt="" referrerPolicy="no-referrer"/>:account.customer?<span className="acctInitial">{(account.customer.name||'R').charAt(0).toLocaleUpperCase('tr-TR')}</span>:<IUser/>}
+        </button>}
         <button className="cartRound" onClick={onCart} aria-label="Sepet"><ICart/>{count>0&&<b>{count}</b>}</button>
         <button className="orderBtn" onClick={()=>nav('contact')}>Sipariş Ver ↗</button>
         <button className={`hamb ${open?'hambOpen':''}`} onClick={()=>setOpen(!open)} aria-label={open?'Menüyü kapat':'Menüyü aç'} aria-expanded={open}><i/><i/><i/></button>
@@ -2744,6 +2779,35 @@ function App(){
       .finally(()=>{ if(alive) setCatalogReady(true); });
     return()=>{alive=false;};
   },[]);
+  // Müşteri hesabı (Google ile giriş). Giriş kapalıysa available:false gelir ve
+  // sitede hiçbir giriş düğmesi görünmez.
+  const [account,setAccount]=useState({available:false, customer:null, serverFavs:[], loaded:false});
+  const favSynced=useRef(false);
+  useEffect(()=>{
+    apiJson('/me')
+      .then(d=>setAccount({available:Boolean(d.available), customer:d.customer||null, serverFavs:Array.isArray(d.favorites)?d.favorites:[], loaded:true}))
+      .catch(()=>setAccount(a=>({...a, loaded:true})));
+  },[]);
+  // Girişte: bu cihazdaki favoriler ile hesaptakiler birleştirilir; bu cihazdan
+  // verilmiş siparişler hesaba bağlanır.
+  useEffect(()=>{
+    if(!catalogReady || !account.customer || favSynced.current) return;
+    favSynced.current=true;
+    const valid=new Set(products.map(p=>p.id));
+    const merged=[...new Set([...(Array.isArray(favorites)?favorites:[]), ...account.serverFavs])].filter(id=>valid.has(id));
+    setFavorites(merged);
+    if(JSON.stringify(merged)!==JSON.stringify(account.serverFavs)) apiJson('/me/favorites',{method:'PUT',body:{ids:merged}}).catch(()=>{});
+    const mine=readStored(MY_ORDERS_KEY,[]);
+    if(Array.isArray(mine)&&mine.length) apiJson('/me/claim',{method:'POST',body:{orders:mine.slice(0,10).map(m=>({orderNo:m.orderNo,last4:m.last4}))}}).catch(()=>{});
+  },[catalogReady, account.customer]);
+  // Sonraki favori değişiklikleri hesaba kaydedilir.
+  useEffect(()=>{
+    if(!account.customer || !favSynced.current) return;
+    const t=setTimeout(()=>apiJson('/me/favorites',{method:'PUT',body:{ids:favorites}}).catch(()=>{}),700);
+    return()=>clearTimeout(t);
+  },[favorites, account.customer]);
+  const signedOut=()=>{ favSynced.current=false; setAccount(a=>({...a, customer:null, serverFavs:[]})); };
+  const logout=async()=>{ await apiJson('/me/logout',{method:'POST',body:{}}).catch(()=>{}); signedOut(); };
   const [drawer,setDrawer]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [navOpen,setNavOpen]=useState(false);
@@ -2904,7 +2968,8 @@ function App(){
       {page==='contact'&&<ContactPage settings={siteSettings}/>}
       {page==='track'&&<TrackPage go={go}/>}
       {page==='notfound'&&<NotFoundPage go={go}/>}
-      {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go}/>}
+      {page==='account'&&<AccountPage account={account} go={go} favorites={favorites} onLogout={logout} onDeleted={signedOut}/>}
+      {page==='favorites'&&<FavoritesPage products={products} favorites={favorites} add={add} goProduct={goProduct} allReviews={allReviews} toggleFav={toggleFav} go={go} account={account}/>}
       {page==='product'&&!currentProduct&&<main className="page productDetailPage"><p className="pageLoading">Ürün yükleniyor…</p></main>}
       {page==='product'&&currentProduct&&<ProductDetailPage product={currentProduct} go={go} add={add} allReviews={allReviews} setAllReviews={setAllReviews} favorites={favorites} toggleFav={toggleFav} products={products} recentIds={recentIds} settings={siteSettings}/>}
       <Footer go={go} settings={siteSettings} onAdmin={handleAdmin}/>
@@ -2912,9 +2977,9 @@ function App(){
   );
   return (
     <>
-      <Header page={page} go={go} count={cart.reduce((s,x)=>s+x.qty,0)} favCount={favorites.length} onCart={()=>setDrawer(true)} onSearch={()=>setSearchOpen(true)} settings={siteSettings} onNavToggle={setNavOpen}/>
+      <Header page={page} go={go} count={cart.reduce((s,x)=>s+x.qty,0)} favCount={favorites.length} onCart={()=>setDrawer(true)} onSearch={()=>setSearchOpen(true)} settings={siteSettings} onNavToggle={setNavOpen} account={account}/>
       <PageTransition pageKey={page+(currentProduct?.id||'')}>{pageContent}</PageTransition>
-      <CartDrawer open={drawer} cart={cart} setOpen={setDrawer} inc={incQty} dec={dec} remove={removeItem} createOrder={createOrder} clearCart={()=>setCart([])} go={go}/>
+      <CartDrawer open={drawer} cart={cart} setOpen={setDrawer} inc={incQty} dec={dec} remove={removeItem} createOrder={createOrder} clearCart={()=>setCart([])} go={go} account={account}/>
       <SearchOverlay open={searchOpen} onClose={()=>setSearchOpen(false)} products={products} goProduct={goProduct}/>
       <BottomNav page={page} go={go} onSearch={()=>setSearchOpen(true)} onCart={()=>setDrawer(true)} favCount={favorites.length} cartCount={cart.reduce((s,x)=>s+x.qty,0)}/>
       {toast&&<div className={`toast ${drawer?'toastTop':''}`} role="status">✓ {toast}</div>}
