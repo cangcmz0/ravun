@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS reviews (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS reviews_product_idx ON reviews (product_id);
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reply text;
+ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reply_at timestamptz;
 CREATE TABLE IF NOT EXISTS messages (
   id bigserial PRIMARY KEY,
   data jsonb NOT NULL,

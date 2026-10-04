@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Save } from 'lucide-react'
-import { categoryLabelFromKey } from '@/lib/ravun-data'
-import { errorMessage, fetchSettings, saveSettings } from '@/lib/api'
+import { categoryKey, categoryList, heroSlidesFrom, setCategoryLabels } from '@/lib/ravun-data'
+import { errorMessage, fetchProducts, fetchSettings, saveSettings } from '@/lib/api'
+import { type EditableSlide, HeroSlidesEditor, slideUid } from './components/hero-slides-editor'
+import { type CategoryRow, CategoryManager, TextsEditor, categoryUid, defaultTexts } from './components/category-manager'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -24,9 +26,6 @@ import { ThemeSwitch } from '@/components/theme-switch'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-// Sıra DEFAULT_CATEGORY_SETTINGS ile birebir aynı — bkz. lib/ravun-data.ts
-const CATEGORY_KEYS = ['tum', 'duvar-rafi', 'bicak-standi', 'masaustu', 'sunum-tahtasi', 'paketleme']
-
 // Sitede gerçekten bir bölümü açıp kapatan iki anahtar (bkz. main.jsx ~2467-2468)
 // Her anahtar ana sayfada bir bölümü açıp kapatır (sıra, sitedeki sırayla aynı).
 const VISIBILITY_SWITCHES = [
@@ -46,12 +45,40 @@ export function Settings() {
   const [form, setForm] = useState<any>(null)
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [slides, setSlides] = useState<EditableSlide[]>([])
+  const [catRows, setCatRows] = useState<CategoryRow[]>([])
+  const [products, setProducts] = useState<any[]>([])
+
+  // Sunucudan gelen ayarı forma ve slayt/kategori düzenleyicilerine dağıtır.
+  const applySettings = (settings: any) => {
+    setForm(settings)
+    setCategoryLabels(settings.categories)
+    setSlides(heroSlidesFrom(settings).map((sl) => ({ ...sl, _uid: slideUid() })))
+    setCatRows(categoryList(settings).map((label) => ({
+      uid: categoryUid(),
+      label,
+      original: label,
+      texts: { ...defaultTexts(label), ...(settings.categorySettings?.[categoryKey(label)] || {}) },
+    })))
+  }
 
   useEffect(() => {
     fetchSettings()
-      .then(setForm)
+      .then(applySettings)
       .catch((err) => setLoadError(errorMessage(err, 'Ayarlar yüklenemedi.')))
+    // Kategori ürün sayıları ve slayt → ürün bağlantısı için
+    fetchProducts().then(setProducts).catch(() => {})
   }, [])
+
+  const categoryCounts = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const p of products) out[categoryKey(p.category)] = (out[categoryKey(p.category)] || 0) + 1
+    return out
+  }, [products])
+  const productOptions = useMemo(
+    () => [...products].sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0)).map((p) => ({ id: Number(p.id), title: p.title })),
+    [products]
+  )
 
   const set = (key: string) => (value: any) => setForm((f: any) => ({ ...f, [key]: value }))
   const setCat = (key: string, field: string) => (value: any) =>
@@ -65,9 +92,29 @@ export function Settings() {
 
   const handleSave = async () => {
     if (!form || saving) return
+    // Kategori adları boş olamaz ve birbirinden farklı olmalı.
+    const labels = catRows.map((r) => r.label.trim().replace(/\s+/g, ' '))
+    if (labels.some((l) => !l)) return toast.error('Kategori adı boş bırakılamaz.')
+    const keys = labels.map(categoryKey)
+    if (keys.some((k) => k === 'tum')) return toast.error('"Tümü" kategori adı olarak kullanılamaz.')
+    if (new Set(keys).size !== keys.length) return toast.error('İki kategorinin adı aynı olamaz.')
+    if (!slides.length) return toast.error('En az bir slayt olmalı.')
+    const renames = catRows
+      .map((r, i) => ({ from: r.original, to: labels[i] }))
+      .filter((r): r is { from: string; to: string } => Boolean(r.from) && r.from !== r.to)
+    const payload = {
+      ...form,
+      categories: labels,
+      categorySettings: {
+        tum: form.categorySettings?.tum,
+        ...Object.fromEntries(catRows.map((r, i) => [keys[i], r.texts])),
+      },
+      heroSlides: slides.map(({ _uid, ...sl }) => sl),
+    }
     setSaving(true)
     try {
-      setForm(await saveSettings(form))
+      applySettings(await saveSettings(payload, renames))
+      if (renames.length) fetchProducts().then(setProducts).catch(() => {})
       toast.success('Site ayarları kaydedildi · sitede yaklaşık 30 sn içinde görünür')
     } catch (err) {
       toast.error(`Kaydedilemedi: ${errorMessage(err)}`)
@@ -116,32 +163,30 @@ export function Settings() {
           </TabsList>
 
           {/* ── HERO ── */}
-          <TabsContent value='hero' className='mt-4'>
+          <TabsContent value='hero' className='mt-4 space-y-4'>
             <Card>
               <CardHeader>
-                <CardTitle>Ana sayfa hero</CardTitle>
-                <CardDescription>Sitenin en üstündeki karşılama alanı.</CardDescription>
+                <CardTitle>Ana sayfa slaytları</CardTitle>
+                <CardDescription>
+                  Sitenin en üstünde sırayla dönen görseller. Sürükleyerek sıralayın; odak noktasıyla telefonda görünen kısmı ayarlayın.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <HeroSlidesEditor slides={slides} onChange={setSlides} products={productOptions} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Butonlar ve duyuru</CardTitle>
               </CardHeader>
               <CardContent className='grid gap-4 sm:grid-cols-2'>
-                <div className='grid gap-1.5'>
-                  <Label htmlFor='st-heroTag'>Üst etiket</Label>
-                  <Input id='st-heroTag' value={form.heroTag} onChange={(e) => set('heroTag')(e.target.value)} />
-                </div>
                 <div className='grid gap-1.5'>
                   <Label htmlFor='st-heroCta'>Birincil buton metni</Label>
                   <Input id='st-heroCta' value={form.heroCta} onChange={(e) => set('heroCta')(e.target.value)} />
                 </div>
                 <div className='grid gap-1.5'>
-                  <Label htmlFor='st-heroLine1'>Başlık — 1. satır</Label>
-                  <Input id='st-heroLine1' value={form.heroLine1} onChange={(e) => set('heroLine1')(e.target.value)} />
-                </div>
-                <div className='grid gap-1.5'>
                   <Label htmlFor='st-heroSecondCta'>İkincil buton metni</Label>
                   <Input id='st-heroSecondCta' value={form.heroSecondCta} onChange={(e) => set('heroSecondCta')(e.target.value)} />
-                </div>
-                <div className='grid gap-1.5'>
-                  <Label htmlFor='st-heroLine2'>Başlık — 2. satır</Label>
-                  <Input id='st-heroLine2' value={form.heroLine2} onChange={(e) => set('heroLine2')(e.target.value)} />
                 </div>
                 <div className='grid gap-1.5 sm:col-span-2'>
                   <Label htmlFor='st-announcement'>
@@ -221,53 +266,30 @@ export function Settings() {
 
           {/* ── KATEGORİLER ── */}
           <TabsContent value='kategoriler' className='mt-4 space-y-4'>
-            {CATEGORY_KEYS.map((key) => {
-              const cat = form.categorySettings?.[key] || { eyebrow: '', title: '', desc: '', image: '' }
-              return (
-                <Card key={key}>
-                  <CardHeader>
-                    <CardTitle>{categoryLabelFromKey(key)}</CardTitle>
-                  </CardHeader>
-                  <CardContent className='grid gap-4 sm:grid-cols-[1fr_1fr_auto]'>
-                    <div className='grid gap-1.5'>
-                      <Label htmlFor={`st-cat-${key}-eyebrow`}>Üst etiket</Label>
-                      <Input id={`st-cat-${key}-eyebrow`} value={cat.eyebrow} onChange={(e) => setCat(key, 'eyebrow')(e.target.value)} />
-                    </div>
-                    <div className='grid gap-1.5'>
-                      <Label htmlFor={`st-cat-${key}-title`}>Başlık</Label>
-                      <Input id={`st-cat-${key}-title`} value={cat.title} onChange={(e) => setCat(key, 'title')(e.target.value)} />
-                    </div>
-                    <div className='row-span-2 grid gap-1.5 justify-items-start'>
-                      <Label>Önizleme</Label>
-                      <div className='bg-muted h-20 w-32 overflow-hidden rounded-md border'>
-                        <img
-                          key={cat.image}
-                          src={cat.image}
-                          alt=''
-                          className='h-full w-full object-cover'
-                          onError={(e) => {
-                            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className='grid gap-1.5 sm:col-span-2'>
-                      <Label htmlFor={`st-cat-${key}-desc`}>Açıklama</Label>
-                      <Textarea id={`st-cat-${key}-desc`} rows={2} value={cat.desc} onChange={(e) => setCat(key, 'desc')(e.target.value)} />
-                    </div>
-                    <div className='grid gap-1.5 sm:col-span-3'>
-                      <Label htmlFor={`st-cat-${key}-image`}>Görsel yolu / URL</Label>
-                      <Input
-                        id={`st-cat-${key}-image`}
-                        value={cat.image}
-                        onChange={(e) => setCat(key, 'image')(e.target.value)}
-                        placeholder='/assets/products_hero-1.webp'
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
+            <Card>
+              <CardHeader>
+                <CardTitle>Kategoriler</CardTitle>
+                <CardDescription>
+                  Sürükleyerek sıralayın (sitedeki filtre sırası). Adını değiştirdiğiniz kategorideki ürünler kaydedince otomatik güncellenir.
+                  İçinde ürün olan kategori silinemez. Satırdaki ok simgesiyle kategorinin koleksiyon sayfası metinlerini düzenleyebilirsiniz.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <CategoryManager rows={catRows} onChange={setCatRows} counts={categoryCounts} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Tüm koleksiyon sayfası</CardTitle>
+                <CardDescription>Koleksiyon sayfasında "Tümü" seçiliyken görünen başlık alanı.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <TextsEditor
+                  texts={form.categorySettings?.tum || defaultTexts('Tümü')}
+                  setText={(k) => (v) => setCat('tum', k)(v)}
+                />
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ── PAKETLEME & HEDİYE ── */}

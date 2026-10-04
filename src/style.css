@@ -12151,3 +12151,9 @@ html body .trkHelp button{border:1px solid var(--border);background:transparent;
   html body .trkForm button[type=submit]{width:100%}
   html body .trkHelp a,html body .trkHelp button{flex:1 1 100%;justify-content:center}
 }
+
+/* ── Yorumlara atölye yanıtı ── */
+html body .reviewReply{margin:10px 0 6px;padding:10px 12px;border-left:3px solid var(--order-btn);background:rgba(215,131,111,.08);border-radius:0 12px 12px 0}
+html body .reviewReply b{display:flex;align-items:center;gap:7px;font:700 12px/1 var(--sans);letter-spacing:.04em;color:var(--text-main);margin-bottom:6px}
+html body .reviewReply b i{flex:none;width:20px;height:20px;border-radius:50%;background:var(--text-main);color:#fff;display:grid;place-items:center;font:600 11px/1 var(--serif);font-style:normal}
+html body .reviewReply p{margin:0;font:400 14px/1.55 var(--sans);color:var(--text-muted)}

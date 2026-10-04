@@ -9,8 +9,8 @@ import {
   rateLimit, clearRateLimit, LOGIN_MAX_FAILS, LOGIN_LOCK_MS,
 } from './auth.js'
 import {
-  cleanText, safeNumber, sanitizeProduct, sanitizeSettings, sanitizeReviewInput,
-  sanitizeContactInput, ORDER_STATUS_KEYS,
+  cleanText, cleanMultiline, safeNumber, sanitizeProduct, sanitizeSettings, sanitizeReviewInput,
+  sanitizeContactInput, categoryKey, ORDER_STATUS_KEYS,
 } from './sanitize.js'
 import {
   loadNotify, saveNotify, sanitizeNotify, publicNotify, sendTelegram, detectChats,
@@ -39,6 +39,8 @@ function reviewRow(r) {
     helpful: r.helpful,
     approved: r.approved,
     createdAt: r.created_at,
+    reply: r.reply || '',
+    replyAt: r.reply_at || null,
   }
 }
 
@@ -329,12 +331,30 @@ async function adminRoute(req, seg) {
     if (m === 'GET') return json(200, { settings: await loadSettings(p) }, NO_STORE)
     if (m === 'PUT') {
       const clean = sanitizeSettings(req.body?.settings)
-      await p.query(
-        `INSERT INTO settings (key, data, updated_at) VALUES ('site', $1, now())
-         ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
-        [clean],
-      )
-      return json(200, { settings: clean }, NO_STORE)
+      // Kategori yeniden adlandırmaları: o kategorideki ürünler de aynı işlemde güncellenir.
+      const renames = (Array.isArray(req.body?.renames) ? req.body.renames : []).slice(0, 30)
+        .map((r) => ({ from: categoryKey(r?.from), to: cleanText(r?.to, 40) }))
+        .filter((r) => r.from && r.to && r.from !== 'tum' && categoryKey(r.to) !== r.from)
+      let renamed = 0
+      await tx(async (c) => {
+        await c.query(
+          `INSERT INTO settings (key, data, updated_at) VALUES ('site', $1, now())
+           ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+          [clean],
+        )
+        if (!renames.length) return
+        const { rows } = await c.query('SELECT id, data FROM products')
+        for (const row of rows) {
+          const hit = renames.find((r) => r.from === categoryKey(row.data?.category))
+          if (!hit) continue
+          await c.query(
+            `UPDATE products SET data = jsonb_set(data, '{category}', to_jsonb($2::text)), updated_at = now() WHERE id = $1`,
+            [row.id, hit.to],
+          )
+          renamed++
+        }
+      })
+      return json(200, { settings: clean, renamed }, NO_STORE)
     }
   }
 
@@ -381,7 +401,19 @@ async function adminRoute(req, seg) {
     const rid = Math.round(Number(id))
     if (!Number.isFinite(rid)) return fail(400, 'Geçersiz yorum.')
     if (m === 'PATCH') {
-      const { rows } = await p.query('UPDATE reviews SET approved = $2 WHERE id = $1 RETURNING *', [rid, Boolean(req.body?.approved)])
+      // Yalnızca gönderilen alanlar değişir: onay ve/veya atölye yanıtı.
+      const b = req.body || {}
+      const approved = typeof b.approved === 'boolean' ? b.approved : null
+      const hasReply = typeof b.reply === 'string'
+      const reply = hasReply ? cleanMultiline(b.reply, 1000).replace(/[<>]/g, '') : null
+      const { rows } = await p.query(
+        `UPDATE reviews SET
+           approved = COALESCE($2, approved),
+           reply = CASE WHEN $3 THEN NULLIF($4, '') ELSE reply END,
+           reply_at = CASE WHEN $3 THEN (CASE WHEN $4 = '' THEN NULL ELSE now() END) ELSE reply_at END
+         WHERE id = $1 RETURNING *`,
+        [rid, approved, hasReply, reply ?? ''],
+      )
       if (!rows[0]) return fail(404, 'Yorum bulunamadı.')
       return json(200, { review: reviewRow(rows[0]) }, NO_STORE)
     }

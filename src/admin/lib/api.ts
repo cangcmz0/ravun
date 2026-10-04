@@ -100,9 +100,10 @@ export async function fetchSettings() {
   const { settings } = await request<{ settings: any }>('/admin/settings')
   return normalizeSiteSettings(settings)
 }
-export async function saveSettings(settings: any) {
+// renames: yeniden adlandırılan kategoriler; sunucu o kategorideki ürünleri de günceller.
+export async function saveSettings(settings: any, renames: { from: string; to: string }[] = []) {
   const prepared = await uploadInlineImages(settings)
-  const res = await request<{ settings: any }>('/admin/settings', 'PUT', { settings: prepared })
+  const res = await request<{ settings: any; renamed?: number }>('/admin/settings', 'PUT', { settings: prepared, renames })
   return normalizeSiteSettings(res.settings)
 }
 
@@ -126,6 +127,11 @@ export async function fetchReviews(): Promise<Record<string, any[]>> {
 }
 export async function setReviewApproved(id: number, approved: boolean) {
   await request(`/admin/reviews/${id}`, 'PATCH', { approved })
+}
+// Atölyenin yoruma yanıtı (boş metin yanıtı kaldırır)
+export async function setReviewReply(id: number, reply: string) {
+  const { review } = await request<{ review: any }>(`/admin/reviews/${id}`, 'PATCH', { reply })
+  return review
 }
 export async function deleteReview(id: number) {
   await request(`/admin/reviews/${id}`, 'DELETE')

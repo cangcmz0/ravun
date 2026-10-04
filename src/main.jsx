@@ -122,7 +122,17 @@ function categoryKey(value) {
   };
   return aliases[key] || key;
 }
+// Panelden yönetilen kategori listesi (Site ayarları → Kategoriler). Katalog
+// geldiğinde setSiteCategories ile güncellenir; etiket ve sıra buradan gelir.
+let SITE_CATEGORIES = CATEGORIES.slice(1);
+let CUSTOM_CATEGORY_LABELS = {};
+function setSiteCategories(list) {
+  const clean = (Array.isArray(list) ? list : []).map(x => cleanText(x, 40)).filter(Boolean).slice(0, 30);
+  SITE_CATEGORIES = clean.length ? clean : CATEGORIES.slice(1);
+  CUSTOM_CATEGORY_LABELS = Object.fromEntries(clean.map(l => [categoryKey(l), l]));
+}
 function categoryLabelFromKey(key, fallback='') {
+  if (CUSTOM_CATEGORY_LABELS[key]) return CUSTOM_CATEGORY_LABELS[key];
   const labels = {
     'tum': 'Tümü',
     'duvar-rafi': 'Duvar Rafı',
@@ -364,6 +374,8 @@ function useAutosave(key, value, delay = 500, enabled = true) {
    ulaşılamazsa önbellek ya da yerleşik ürün listesiyle çalışmaya devam edilir. */
 const CATALOG_CACHE_KEY = 'ravun:catalogCache';
 function catalogFromPayload(data) {
+  // Ürün etiketleri kategori listesine göre çözüldüğü için önce liste ayarlanır.
+  setSiteCategories(data?.settings?.categories);
   return {
     products: Array.isArray(data?.products) ? (data.products.length ? normalizeProducts(data.products) : []) : normalizeProducts(INITIAL_PRODUCTS),
     reviews: normalizeReviews(data?.reviews && typeof data.reviews === 'object' ? data.reviews : INITIAL_REVIEWS),
@@ -464,7 +476,16 @@ function normalizeSiteSettings(value) {
     showBrandExperience: staleVisualPreset ? DEFAULT_SITE_SETTINGS.showBrandExperience : (typeof incoming.showBrandExperience === 'boolean' ? incoming.showBrandExperience : DEFAULT_SITE_SETTINGS.showBrandExperience),
     showJournal: staleVisualPreset ? DEFAULT_SITE_SETTINGS.showJournal : (typeof incoming.showJournal === 'boolean' ? incoming.showJournal : DEFAULT_SITE_SETTINGS.showJournal),
     showCta: staleVisualPreset ? DEFAULT_SITE_SETTINGS.showCta : (typeof incoming.showCta === 'boolean' ? incoming.showCta : DEFAULT_SITE_SETTINGS.showCta),
-    categorySettings: safeCats
+    categorySettings: safeCats,
+    categories: Array.isArray(incoming.categories) ? incoming.categories.map(x => cleanText(x, 40)).filter(Boolean).slice(0, 30) : [],
+    heroSlides: (Array.isArray(incoming.heroSlides) ? incoming.heroSlides : []).slice(0, 6).map(sl => ({
+      image: safeImageSrc(sl?.image, ''),
+      tag: cleanText(sl?.tag, 60),
+      line1: cleanText(sl?.line1, 90),
+      line2: cleanText(sl?.line2, 90),
+      pos: safeNumber(sl?.pos, 50, 0, 100),
+      productId: safeNumber(sl?.productId, 0, 0, 999999)
+    })).filter(sl => sl.image)
   };
 }
 function normalizeProducts(value) {
@@ -529,7 +550,8 @@ function normalizeReviews(value) {
       date: cleanText(r?.date || 'Yeni', 60),
       text: cleanText(r?.text || '', 700),
       helpful: safeNumber(r?.helpful, 0, 0, 99999),
-      approved: r?.approved !== false
+      approved: r?.approved !== false,
+      reply: cleanText(r?.reply || '', 1000)
     }));
   });
   return fixed;
@@ -1090,6 +1112,7 @@ function ReviewSection({productId, allReviews, setAllReviews}){
                 <StarRating rating={r.rating} size="xs"/>
               </div>
               <p className="reviewText">{r.text}</p>
+              {r.reply&&<div className="reviewReply"><b><i aria-hidden="true">R</i>Ravun Atölye yanıtladı</b><p>{r.reply}</p></div>}
               <button className={`helpfulBtn ${helpfulMap[r.id]?'helpfulDone':''}`} onClick={()=>markHelpful(r.id)}>
                 <IThumbUp/> Faydalı ({r.helpful})
               </button>
@@ -1505,7 +1528,7 @@ function Collection({add, standalone=false, goProduct, products, allReviews, fav
   const categories=useMemo(()=>{
     const map=new Map();
     map.set('tum', {key:'tum', label:'Tümü', count:visible.length});
-    CATEGORIES.slice(1).forEach(cat=>{
+    SITE_CATEGORIES.forEach(cat=>{
       const key=categoryKey(cat);
       if(key && !map.has(key)) map.set(key, {key, label:categoryLabelFromKey(key, cat), count:0});
     });
@@ -2323,30 +2346,39 @@ function Header({count, favCount, onCart, page, go, onSearch, settings, onNavTog
   );
 }
 /* ── HERO ── */
-function Hero({go, settings}){
+// Slaytlar panelden yönetilir (Site ayarları → Hero). Ayarda slayt yoksa
+// varsayılanlar kullanılır; eski tek-slayt metin ayarları ilk slayta uygulanır.
+function heroSlidesFor(settings){
+  if(Array.isArray(settings?.heroSlides) && settings.heroSlides.length){
+    return settings.heroSlides.map(sl=>({...sl, pos:`${sl.pos}% center`}));
+  }
+  return slides.map((sl,i)=>i===0?{...sl, tag:settings?.heroTag || sl.tag, line1:settings?.heroLine1 || sl.line1, line2:settings?.heroLine2 || sl.line2}:sl);
+}
+function Hero({go, settings, products, goProduct}){
+  const list=useMemo(()=>heroSlidesFor(settings),[settings]);
   const [active,setActive]=useState(0);
-  useEffect(()=>{const t=setInterval(()=>setActive(v=>(v+1)%slides.length),4500);return()=>clearInterval(t);},[]);
-  // Panelden düzenlenen hero metni ilk slayta uygulanır; diğer slaytlar kendi metnini korur.
-  const s=active===0
-    ? {...slides[0], tag:settings?.heroTag || slides[0].tag, line1:settings?.heroLine1 || slides[0].line1, line2:settings?.heroLine2 || slides[0].line2}
-    : slides[active];
-  const heroSrc = slides[active]?.image || slides[0].image;
+  useEffect(()=>{ if(active>=list.length) setActive(0); },[list.length]);
+  useEffect(()=>{ if(list.length<2) return; const t=setInterval(()=>setActive(v=>(v+1)%list.length),4500);return()=>clearInterval(t);},[list.length]);
+  const s=list[active] || list[0];
+  const heroSrc = s?.image || slides[0].image;
+  // Slayta bir ürün bağlandıysa birincil buton o ürünü açar.
+  const linked = s?.productId ? (products||[]).find(p=>p.id===s.productId && p.visible!==false) : null;
   return (
     <section id="hero" className="hero" style={{'--hero-img': `url(${heroSrc})`}}>
-      {slides.map((slide,i)=><img key={slide.image} src={slide.image} alt="Ravun atölye ürünü" className={`heroImg ${i===active?'active':''}`} style={{objectPosition: slide.pos || 'center center'}} loading={i===active?'eager':'lazy'} fetchpriority={i===active?'high':'low'}/>)}
+      {list.map((slide,i)=><img key={`${i}-${slide.image}`} src={slide.image} alt={slide.line1 ? `${slide.line1} ${slide.line2||''}`.trim() : 'Ravun atölye ürünü'} className={`heroImg ${i===active?'active':''}`} style={{objectPosition: slide.pos || 'center center'}} loading={i===active?'eager':'lazy'} fetchpriority={i===active?'high':'low'}/>)}
       <div className="heroOverlay"/>
       <div key={active} className="heroContent heroEnter">
-        <p className="kicker">· {s.tag}</p>
-        <h1><span>{s.line1}</span><em>{s.line2}</em></h1>
+        {s?.tag&&<p className="kicker">· {s.tag}</p>}
+        <h1><span>{s?.line1}</span><em>{s?.line2}</em></h1>
         <div className="heroCtas">
-          <button className="heroPrimaryBtn" onClick={()=>go('collection')}>{settings?.heroCta || 'Bu Parçayı Gör ↗'}</button>
+          <button className="heroPrimaryBtn" onClick={()=>linked?goProduct?.(linked):go('collection')}>{settings?.heroCta || 'Bu Parçayı Gör ↗'}</button>
           <button className="heroSecondaryBtn" onClick={()=>go('collection')}>{settings?.heroSecondCta || 'TÜM KOLEKSİYON'} <b>→</b></button>
         </div>
       </div>
       {/* Sol alt — slayt göstergesi */}
       <div className="sliderHint">
-        {slides.map((_,i)=>(
-          <button key={i} className={active===i?'active':''} onClick={()=>setActive(i)}>
+        {list.length>1&&list.map((_,i)=>(
+          <button key={i} className={active===i?'active':''} onClick={()=>setActive(i)} aria-label={`Slayt ${i+1}`}>
             <span className="sliderLine"/>
             <span className="sliderNum">0{i+1}</span>
           </button>
@@ -2521,7 +2553,7 @@ function OrderTrustFlow({go}){
 /* Site Ayarları > Görünürlük anahtarlarının her biri burada bir bölümü açıp kapatır. */
 function Home({add, go, goProduct, products, allReviews, favorites, toggleFav, settings}){
   return <>
-    <Hero go={go} settings={settings}/>
+    <Hero go={go} settings={settings} products={products} goProduct={goProduct}/>
     <Marquee/>
     {settings?.showAtelierFeature&&<AtelierFeature settings={settings}/>}
     <HomeProducts add={add} go={go} goProduct={goProduct} products={products} allReviews={allReviews} favorites={favorites} toggleFav={toggleFav}/>

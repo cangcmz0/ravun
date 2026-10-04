@@ -60,6 +60,24 @@ export function safeImageSrc(value, fallback = '') {
   }
 }
 
+// Kategori adından kararlı anahtar üretir (site ve paneldeki categoryKey ile aynı).
+const CATEGORY_ALIASES = {
+  tumu: 'tum', 'b-cak-stand': 'bicak-standi', 'b-cak-standi': 'bicak-standi',
+  'duvar-raf': 'duvar-rafi', 'masa-ustu': 'masaustu', 'sunum-tahta': 'sunum-tahtasi',
+}
+export function categoryKey(value) {
+  const key = String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase('tr-TR')
+    .replace(/[ıİ]/g, 'i')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return CATEGORY_ALIASES[key] || key
+}
+
 export function safeList(value, maxItems, mapper) {
   return (Array.isArray(value) ? value : []).slice(0, maxItems).map(mapper).filter(Boolean)
 }
@@ -129,6 +147,33 @@ export function sanitizeSettings(s) {
   for (const k of SETTINGS_FLAGS) if (typeof src[k] === 'boolean') out[k] = src[k]
   if ('instagramUrl' in src) out.instagramUrl = safeUrl(src.instagramUrl, 'https://instagram.com/')
   if ('giftPrice' in src) out.giftPrice = safeNumber(src.giftPrice, 0, 0, 100000)
+  // Kategori listesi (sıralı; "Tümü" hariç). Aynı anahtara düşen adlar tekilleştirilir.
+  if (Array.isArray(src.categories)) {
+    const seen = new Set()
+    out.categories = []
+    for (const raw of src.categories.slice(0, 30)) {
+      const label = cleanText(raw, 40)
+      const key = categoryKey(label)
+      if (!label || !key || key === 'tum' || seen.has(key)) continue
+      seen.add(key)
+      out.categories.push(label)
+    }
+  }
+  // Ana sayfa slaytları (en fazla 6). Görseli olmayan slayt kaydedilmez.
+  if (Array.isArray(src.heroSlides)) {
+    out.heroSlides = safeList(src.heroSlides, 6, (sl) => {
+      const image = safeImageSrc(sl?.image)
+      if (!image) return null
+      return {
+        image,
+        tag: cleanText(sl.tag, 60),
+        line1: cleanText(sl.line1, 90),
+        line2: cleanText(sl.line2, 90),
+        pos: Math.round(safeNumber(sl.pos, 50, 0, 100)),
+        productId: Math.round(safeNumber(sl.productId, 0, 0, 999999)),
+      }
+    })
+  }
   if (src.categorySettings && typeof src.categorySettings === 'object') {
     out.categorySettings = {}
     for (const [key, cat] of Object.entries(src.categorySettings).slice(0, 30)) {

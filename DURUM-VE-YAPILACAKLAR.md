@@ -69,6 +69,20 @@ yorumlar bir kez yüklenir.
 - **Yazdırma:** Sipariş listesinde ve detayında yazıcı simgesi → sipariş fişi
   (ürünler, hediye notları, toplam, not, paketleme kontrol kutuları).
 
+## Ürün ve içerik yönetimi
+- **Ürün kopyala:** Ürünler listesinde kopyala simgesi → tüm bilgiler ve fotoğraflar
+  dolu form açılır; kopya yeni numarayla, gizli olarak ve aslının hemen arkasına eklenir.
+- **Sitede gör:** Görünür ürünlerin sitedeki sayfasını yeni sekmede açar.
+- **Kategoriler** (Site ayarları → Kategoriler): ekle, yeniden adlandır, sürükleyerek
+  sırala (sitedeki filtre sırası), boşsa sil. Ad değişince o kategorideki ürünler
+  aynı kayıtta güncellenir. Her kategorinin koleksiyon sayfası başlığı/görseli düzenlenebilir.
+- **Ana sayfa slaytları** (Site ayarları → Hero): en fazla 6 slayt; görsel yükleme,
+  metinler, telefonda görünen kısmı seçmek için odak noktası (bilgisayar/telefon
+  önizlemeli), sürükleyerek sıralama, "Bu Parçayı Gör" butonunu bir ürüne bağlama.
+- **Yorumlara yanıt** (Yorumlar → yanıt simgesi): hazır yanıtlar, sitede yorumun
+  altında "Ravun Atölye yanıtladı" olarak görünür; onay bekleyen yorum aynı anda
+  yayınlanabilir.
+
 ## Vercel kurulumu (bir kez)
 
 1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →
