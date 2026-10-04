@@ -7,6 +7,7 @@ import { db, tx } from './db.js'
 import {
   adminConfigured, verifyPin, isAuthed, createSessionCookie, clearSessionCookie,
   rateLimit, clearRateLimit, LOGIN_MAX_FAILS, LOGIN_LOCK_MS,
+  pinInfo, pinProblem, setPanelPin, clearPanelPin,
 } from './auth.js'
 import {
   cleanText, cleanMultiline, safeNumber, sanitizeProduct, sanitizeSettings, sanitizeReviewInput,
@@ -280,13 +281,13 @@ async function saveImage(client, dataUrl) {
 }
 
 async function login(req) {
-  if (!adminConfigured()) return fail(503, 'Sunucuda ADMIN_PIN tanımlı değil. Kurulum adımlarına bakın.')
+  if (!(await adminConfigured())) return fail(503, 'Sunucuda ADMIN_PIN tanımlı değil. Kurulum adımlarına bakın.')
   const key = `login:${req.ip}`
   const check = await rateLimit(key, LOGIN_MAX_FAILS, LOGIN_LOCK_MS, { consume: false })
   if (!check.ok) return fail(429, 'Çok fazla hatalı deneme. Bir süre bekleyin.', { retryAfter: check.retryAfter })
-  if (verifyPin(req.body?.pin)) {
+  if (await verifyPin(req.body?.pin)) {
     await clearRateLimit(key)
-    return json(200, { ok: true }, { 'Set-Cookie': createSessionCookie(req.secure), ...NO_STORE })
+    return json(200, { ok: true }, { 'Set-Cookie': await createSessionCookie(req.secure), ...NO_STORE })
   }
   const after = await rateLimit(key, LOGIN_MAX_FAILS, LOGIN_LOCK_MS)
   const remaining = after.ok ? after.remaining : 0
@@ -458,6 +459,125 @@ async function adminRoute(req, seg) {
     }
   }
 
+  // ── PIN DEĞİŞTİRME ──
+  if (resource === 'pin') {
+    if (m === 'GET') return json(200, { pin: await pinInfo() }, NO_STORE)
+    // Mevcut PIN her değişiklikte yeniden sorulur; yanlış denemeler girişle aynı şekilde sınırlanır.
+    const key = `pin:${req.ip}`
+    const check = await rateLimit(key, LOGIN_MAX_FAILS, LOGIN_LOCK_MS, { consume: false })
+    if (!check.ok) return fail(429, 'Çok fazla hatalı deneme. Bir süre bekleyin.', { retryAfter: check.retryAfter })
+    if (!(await verifyPin(req.body?.current))) {
+      await rateLimit(key, LOGIN_MAX_FAILS, LOGIN_LOCK_MS)
+      return fail(400, 'Mevcut PIN hatalı.')
+    }
+    await clearRateLimit(key)
+    if (m === 'POST') {
+      const next = String(req.body?.next ?? '').trim()
+      const problem = pinProblem(next)
+      if (problem) return fail(400, problem)
+      if (await verifyPin(next)) return fail(400, 'Yeni PIN mevcut PIN ile aynı.')
+      await setPanelPin(next)
+      // Tüm eski oturumlar kapandı; bu cihaz yeni oturumla devam eder.
+      return json(200, { ok: true, pin: await pinInfo() }, { 'Set-Cookie': await createSessionCookie(req.secure), ...NO_STORE })
+    }
+    if (m === 'DELETE') {
+      if (!(await pinInfo()).envAvailable) return fail(400, 'Sunucuda yedek PIN (ADMIN_PIN) tanımlı değil; panel PIN\'i kaldırılamaz.')
+      await clearPanelPin()
+      return json(200, { ok: true, pin: await pinInfo() }, { 'Set-Cookie': await createSessionCookie(req.secure), ...NO_STORE })
+    }
+  }
+
+  // ── YEDEK ──
+  // Ürünler, ayarlar, siparişler, yorumlar ve mesajlar tek JSON dosyasında.
+  // Fotoğrafların kendisi dahil değildir (veritabanında kalır); Telegram token'ı
+  // ve PIN asla yedeğe yazılmaz.
+  if (resource === 'backup' && m === 'GET') {
+    const [products, site, notify, orders, reviews, messages] = await Promise.all([
+      p.query('SELECT data FROM products ORDER BY id'),
+      loadSettings(p),
+      loadNotify(p),
+      p.query('SELECT * FROM orders ORDER BY created_at, id'),
+      p.query('SELECT * FROM reviews ORDER BY created_at, id'),
+      p.query('SELECT * FROM messages ORDER BY created_at, id'),
+    ])
+    const { telegramToken: _omit, ...notifySafe } = notify
+    return json(200, {
+      backup: {
+        format: 'ravun-backup',
+        version: 1,
+        createdAt: new Date().toISOString(),
+        products: products.rows.map((r) => r.data),
+        settings: { site, notify: notifySafe },
+        orders: orders.rows.map((r) => ({ orderNo: r.order_no, status: r.status, data: r.data, createdAt: r.created_at, updatedAt: r.updated_at })),
+        reviews: reviews.rows.map((r) => ({
+          productId: r.product_id, name: r.name, rating: r.rating, text: r.text, helpful: r.helpful,
+          approved: r.approved, dateLabel: r.date_label, reply: r.reply, replyAt: r.reply_at, createdAt: r.created_at,
+        })),
+        messages: messages.rows.map((r) => ({ data: r.data, read: r.is_read, createdAt: r.created_at })),
+      },
+    }, NO_STORE)
+  }
+
+  if (resource === 'restore' && m === 'POST') {
+    if (req.body?.confirm !== 'GERİ YÜKLE') return fail(400, 'Onay metni hatalı.')
+    const bk = req.body?.backup
+    if (!bk || bk.format !== 'ravun-backup' || bk.version !== 1) return fail(400, 'Bu dosya bir Ravun yedeği değil.')
+    const date = (v) => (Number.isFinite(Date.parse(v)) ? new Date(v) : new Date())
+    const products = (Array.isArray(bk.products) ? bk.products : []).slice(0, 500).map(sanitizeProduct).filter(Boolean)
+    if (new Set(products.map((x) => x.id)).size !== products.length) return fail(400, 'Yedekte aynı numaralı ürünler var.')
+    const counts = { products: products.length, orders: 0, reviews: 0, messages: 0 }
+    await tx(async (c) => {
+      await c.query('DELETE FROM products')
+      for (const prod of products) await c.query('INSERT INTO products (id, data) VALUES ($1, $2)', [prod.id, prod])
+      if (bk.settings?.site && typeof bk.settings.site === 'object') {
+        await c.query(
+          `INSERT INTO settings (key, data, updated_at) VALUES ('site', $1, now())
+           ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
+          [sanitizeSettings(bk.settings.site)],
+        )
+      }
+      if (bk.settings?.notify && typeof bk.settings.notify === 'object') {
+        // Mevcut Telegram token'ı korunur (yedekte yoktur).
+        const cur = await loadNotify(c)
+        const { telegramToken: _t, ...rest } = bk.settings.notify
+        try { await saveNotify(c, sanitizeNotify(rest, cur)) } catch { /* bozuk alan: mevcut ayar kalır */ }
+      }
+      await c.query('DELETE FROM orders')
+      for (const o of (Array.isArray(bk.orders) ? bk.orders : []).slice(0, 20000)) {
+        const orderNo = cleanText(o?.orderNo, 40)
+        if (!orderNo || !o.data || typeof o.data !== 'object') continue
+        const ins = await c.query(
+          `INSERT INTO orders (order_no, status, data, created_at, updated_at) VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (order_no) DO NOTHING`,
+          [orderNo, ORDER_STATUS_KEYS.includes(o.status) ? o.status : 'pending', o.data, date(o.createdAt), date(o.updatedAt || o.createdAt)],
+        )
+        counts.orders += ins.rowCount
+      }
+      await c.query('DELETE FROM reviews')
+      for (const r of (Array.isArray(bk.reviews) ? bk.reviews : []).slice(0, 20000)) {
+        const { name, text, rating } = sanitizeReviewInput(r)
+        const pid = Math.round(Number(r?.productId))
+        if (!name || !text || !Number.isFinite(pid)) continue
+        const reply = cleanMultiline(r.reply, 1000).replace(/[<>]/g, '')
+        await c.query(
+          `INSERT INTO reviews (product_id, name, rating, text, helpful, approved, date_label, reply, reply_at, created_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [pid, name, rating, text, Math.round(safeNumber(r.helpful, 0, 0, 99999)), r.approved !== false,
+            cleanText(r.dateLabel, 60) || null, reply || null, reply ? date(r.replyAt) : null, date(r.createdAt)],
+        )
+        counts.reviews++
+      }
+      await c.query('DELETE FROM messages')
+      for (const msg of (Array.isArray(bk.messages) ? bk.messages : []).slice(0, 20000)) {
+        const data = sanitizeContactInput(msg?.data)
+        if (!data.isim) continue
+        await c.query('INSERT INTO messages (data, is_read, created_at) VALUES ($1, $2, $3)', [data, Boolean(msg.read), date(msg.createdAt)])
+        counts.messages++
+      }
+    })
+    return json(200, { ok: true, restored: counts }, NO_STORE)
+  }
+
   if (resource === 'images' && m === 'POST') {
     const url = await saveImage(p, req.body?.dataUrl)
     return json(201, { url }, NO_STORE)
@@ -558,7 +678,7 @@ export async function route(req) {
       // Gizli bilgi içermeyen teşhis alanları: hangi ortam/commit/bölgede çalışıldığı.
       return json(200, {
         ok: true,
-        admin: adminConfigured(),
+        admin: await adminConfigured(),
         env: process.env.VERCEL_ENV || 'local',
         commit: String(process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null,
         region: process.env.VERCEL_REGION || null,
@@ -578,8 +698,8 @@ export async function route(req) {
       if (m !== 'GET' && req.headers['x-ravun-admin'] !== '1') return fail(403, 'Geçersiz istek.')
       if (seg[1] === 'login' && m === 'POST') return await login(req)
       if (seg[1] === 'logout' && m === 'POST') return json(200, { ok: true }, { 'Set-Cookie': clearSessionCookie(req.secure), ...NO_STORE })
-      if (seg[1] === 'session' && m === 'GET') return json(200, { authed: isAuthed(req), configured: adminConfigured() }, NO_STORE)
-      if (!isAuthed(req)) return fail(401, 'Oturum gerekli.')
+      if (seg[1] === 'session' && m === 'GET') return json(200, { authed: await isAuthed(req), configured: await adminConfigured() }, NO_STORE)
+      if (!(await isAuthed(req))) return fail(401, 'Oturum gerekli.')
       return await adminRoute(req, seg.slice(1))
     }
     return fail(404, 'Bulunamadı')

@@ -176,6 +176,33 @@ export async function testTelegram() {
   await request('/admin/notify/test', 'POST', {})
 }
 
+// ── PIN ──
+export type PinInfo = { source: 'panel' | 'env'; updatedAt: string | null; envAvailable: boolean }
+export async function fetchPinInfo() {
+  const { pin } = await request<{ pin: PinInfo }>('/admin/pin')
+  return pin
+}
+export async function changePin(current: string, next: string) {
+  const { pin } = await request<{ pin: PinInfo }>('/admin/pin', 'POST', { current, next })
+  return pin
+}
+export async function resetPanelPin(current: string) {
+  const { pin } = await request<{ pin: PinInfo }>('/admin/pin', 'DELETE', { current })
+  return pin
+}
+
+// ── YEDEK ──
+export async function fetchBackup() {
+  const { backup } = await request<{ backup: any }>('/admin/backup')
+  return backup
+}
+export async function restoreBackup(backup: any) {
+  const { restored } = await request<{ restored: { products: number; orders: number; reviews: number; messages: number } }>(
+    '/admin/restore', 'POST', { backup, confirm: 'GERİ YÜKLE' },
+  )
+  return restored
+}
+
 // ── ESKİ TARAYICI VERİSİNİ SUNUCUYA AKTARMA ──
 export async function importLegacy(payload: { products?: any[]; settings?: any; orders?: any[]; reviews?: any }) {
   const prepared = await uploadInlineImages({

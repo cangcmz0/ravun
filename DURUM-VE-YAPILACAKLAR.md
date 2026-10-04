@@ -40,10 +40,15 @@ yorumlar bir kez yüklenir.
   `GET /api/images/:id`, `GET /api/health`
 - Admin (oturum çerezi + `X-Ravun-Admin: 1` başlığı gerekir):
   `/api/admin/login|logout|session`, `products`, `settings`, `orders/:id`,
-  `reviews/:id`, `messages/:id`, `images`, `import`, `notify` (+ `notify/detect`, `notify/test`)
+  `reviews/:id`, `messages/:id`, `images`, `import`, `notify` (+ `notify/detect`, `notify/test`),
+  `pin`, `backup`, `restore`
 
 ### Güvenlik
-- PIN artık tarayıcı koduna gömülmüyor; yalnızca sunucu ortam değişkeninde.
+- PIN tarayıcı koduna gömülmüyor. Sunucu ortam değişkenindeki `ADMIN_PIN` geçerlidir;
+  panelden (Güvenlik & yedek) değiştirilirse yeni PIN veritabanında scrypt ile saklanır
+  ve öncelik kazanır. PIN değişince diğer cihazlardaki oturumlar kapanır.
+  **Panel PIN'ini unutursanız:** Neon → SQL Editor:
+  `DELETE FROM settings WHERE key = 'admin_auth';` → ortam değişkenindeki PIN yeniden geçerli olur.
 - Oturum: imzalı, `HttpOnly` + `SameSite=Strict` çerez (8 saat).
 - Hatalı PIN: IP başına 5 deneme, sonra 15 dakika kilit (sunucuda tutulur).
 - Sipariş/yorum/mesaj gönderimi IP başına sınırlı (spam koruması).
@@ -82,6 +87,19 @@ yorumlar bir kez yüklenir.
 - **Yorumlara yanıt** (Yorumlar → yanıt simgesi): hazır yanıtlar, sitede yorumun
   altında "Ravun Atölye yanıtladı" olarak görünür; onay bekleyen yorum aynı anda
   yayınlanabilir.
+
+## Güvenlik, yedek ve raporlar
+- **PIN değiştir** (Güvenlik & yedek): mevcut PIN ile onay; 6–12 rakam, 123456/000000
+  gibi kolay PIN'ler reddedilir. "Sunucu PIN'ine dön" panel PIN'ini kaldırır.
+- **Yedek:** tek tıkla JSON (ürünler, site ve sipariş mesaj ayarları, siparişler,
+  yorumlar ve yanıtları, mesajlar). Fotoğrafların kendisi, Telegram token'ı ve PIN
+  dosyaya yazılmaz. **Geri yükleme:** dosya özeti gösterilir, "GERİ YÜKLE" yazarak
+  onaylanır, başlamadan önce mevcut veriler otomatik indirilir. Sınır 4 MB; daha
+  büyük veride/sunucu taşırken `pg_dump` kullanın (fotoğraflar da dahil olur).
+- **Satış raporları** (Raporlar): son 7/30/90 gün, bu ay, geçen ay, bu yıl, tümü.
+  Ciro, sipariş, ortalama sepet, iptal oranı (önceki döneme göre değişimle), hediye
+  paketi oranı, günlük/haftalık/aylık ciro grafiği, en çok satan ürünler, kategori
+  dağılımı, durum dağılımı ve Excel'e (CSV) aktarma. İptaller ciroya dahil edilmez.
 
 ## Vercel kurulumu (bir kez)
 

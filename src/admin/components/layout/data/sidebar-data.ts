@@ -1,6 +1,8 @@
 import {
+  BarChart3,
   BellRing,
   LayoutDashboard,
+  ShieldCheck,
   Mail,
   Package,
   ShoppingBag,
@@ -51,6 +53,11 @@ export const sidebarData: SidebarData = {
           url: '/messages',
           icon: Mail,
         },
+        {
+          title: 'Raporlar',
+          url: '/reports',
+          icon: BarChart3,
+        },
       ],
     },
     {
@@ -65,6 +72,11 @@ export const sidebarData: SidebarData = {
           title: 'Bildirimler',
           url: '/notifications',
           icon: BellRing,
+        },
+        {
+          title: 'Güvenlik & yedek',
+          url: '/security',
+          icon: ShieldCheck,
         },
       ],
     },
