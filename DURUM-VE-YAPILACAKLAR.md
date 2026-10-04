@@ -116,6 +116,16 @@ yorumlar bir kez yüklenir.
 - **Telefonda uygulama gibi:** Panel ana ekrana eklenebilir (`/admin.webmanifest`,
   "Ravun Panel" adı ve simgesi). Telefonda panelde bir kez öneri kartı çıkar.
 
+## Görsel kimlik: Ceviz & Zümrüt
+- Üç ana renk: ceviz (koyu kahve), zümrüt epoksi (yeşil), krem. Mercan yalnızca
+  "Sipariş Ver", "İletişime Geç" ve favori kalbinde.
+- Üst etiketler zümrüt ve başında ince reçine çizgisi; başlıklardaki italik vurgular
+  reçine parıltılı zümrüt; yıldızlar bal rengi.
+- Kayan yazı bandı akan zümrüt epoksi şeridi; footer ceviz damarı dokulu ve üstte
+  dalgalı reçine geçişli.
+- Hepsi `src/style.css` sonundaki "CEVİZ & ZÜMRÜT" bloğunda; geri almak için o blok
+  silinebilir.
+
 ## Vercel kurulumu (bir kez)
 
 1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →
