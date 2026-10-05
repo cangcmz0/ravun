@@ -112,6 +112,15 @@ async function loadSettings(client) {
   return rows[0]?.data || {}
 }
 
+// Google Search Console "HTML dosyası" doğrulaması: panelde yazılan dosya adı
+// sitenin kökünde (/googleXXXX.html) beklenen içerikle sunulur.
+async function googleVerify(name) {
+  const p = await db()
+  const file = (await loadSettings(p)).googleVerifyFile
+  if (!file || file !== name) return fail(404, 'Bulunamadı')
+  return { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' }, body: Buffer.from(`google-site-verification: ${file}`) }
+}
+
 // ── HALKA AÇIK UÇLAR ──
 async function getCatalog() {
   const p = await db()
@@ -854,6 +863,7 @@ export async function route(req) {
     }
     if (seg[0] === 'catalog' && m === 'GET') return await getCatalog()
     if (seg[0] === 'sitemap' && (m === 'GET' || m === 'HEAD')) return await sitemap(req)
+    if (seg[0] === 'gverify' && seg[1] && (m === 'GET' || m === 'HEAD')) return await googleVerify(seg[1])
     if (seg[0] === 'orders' && m === 'POST' && seg.length === 1) return await createOrder(req)
     if (seg[0] === 'orders' && seg[1] === 'track' && m === 'POST') return await trackOrder(req)
     if (seg[0] === 'auth' || seg[0] === 'me') {

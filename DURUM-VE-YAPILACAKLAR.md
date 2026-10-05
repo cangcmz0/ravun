@@ -189,6 +189,27 @@ Müşteri isterse Google hesabıyla giriş yapar (şifre yok). Giriş zorunlu de
   onaylanana kadar sitede görünmez. Ürün sayfasında "Fotoğraflı" filtresi ve
   büyük görüntüleyici var.
 
+## SEO kontrol listesi (Ekim 2026)
+
+Var olanlar: 404 sayfası (noindex), üstte çağrı düğmeleri, iç bağlantılar
+(ilgili ve son bakılan ürünler), sipariş sonrası teşekkür ekranı, ürün
+sayfasında yol (breadcrumb) ve Google verisi, sayfa başına başlık/açıklama/
+paylaşım görseli, robots.txt, otomatik site haritası, müşteri yorumları
+(fotoğraflı), görsel alt metinleri, ürün/yorum/iade zengin sonuçları, KVKK ve
+çerez metinleri.
+
+Bu turda eklenenler:
+- Ürün sayfasında 5 sık sorulan soru ve Google için FAQ verisi.
+- Kurum verisinde telefon, e-posta ve adres (Site ayarları → Yasal bilgiler).
+- İletişim sayfasında telefon, e-posta, adres ve "Haritada aç" bağlantısı.
+- Masaüstünde sağ altta sabit WhatsApp düğmesi (mobilde alt menüde zaten var).
+- **Google Search Console**: Site ayarları → Yasal bilgiler sekmesinde
+  doğrulama dosyasının adı yazılır; site `/googleXXXX.html` adresinden
+  doğru içeriği verir. Sonra Search Console'da `sitemap.xml` eklenir.
+
+Sizin eklemeniz gerekenler: atölye/ekip fotoğrafları ve müşteri hikâyeleri
+(Hikâye sayfasına), Google İşletme Profili.
+
 ## Vercel kurulumu (bir kez)
 
 1. **Veritabanı ekle:** Vercel → proje → **Storage** → **Create Database** →

@@ -335,6 +335,23 @@ export function Settings() {
                 </div>
               </CardContent>
             </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Google Search Console</CardTitle>
+                <CardDescription>
+                  Sitenin Google'da nasıl göründüğünü takip etmek için. Search Console'da "URL ön eki" ile siteyi ekleyin,
+                  "HTML dosyası" doğrulamasını seçin ve size verilen dosyanın <b>adını</b> buraya yazıp kaydedin
+                  (dosyayı yüklemeniz gerekmez). Sonra Search Console'da "Doğrula"ya basın ve site haritası olarak <code>sitemap.xml</code> ekleyin.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='grid gap-1.5'>
+                <Label htmlFor='st-googleVerifyFile'>Doğrulama dosyası adı</Label>
+                <Input id='st-googleVerifyFile' value={form.googleVerifyFile || ''} onChange={(e) => set('googleVerifyFile')(e.target.value.trim())} placeholder='google1a2b3c4d5e6f7g8h.html' />
+                {form.googleVerifyFile && !/^google[a-z0-9]+\.html$/.test(form.googleVerifyFile) && (
+                  <p className='text-destructive text-xs'>Ad "google" ile başlayıp ".html" ile bitmeli (örn. google1a2b3c.html).</p>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* ── PAKETLEME & HEDİYE ── */}

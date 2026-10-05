@@ -44,6 +44,7 @@ http.createServer((req, res) => {
   if (pathname === '/api' || pathname.startsWith('/api/')) return handleNode(req, res)
   // Site haritası veritabanından üretilir (vercel.json'daki rewrite ile aynı)
   if (pathname === '/sitemap.xml') { req.url = '/api/sitemap'; return handleNode(req, res) }
+  if (/^\/google[a-z0-9]+\.html$/.test(pathname)) { req.url = `/api/gverify${pathname}`; return handleNode(req, res) }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; return res.end() }
   const file = resolveStatic(pathname)
   if (file) return sendFile(res, file, pathname.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache')
