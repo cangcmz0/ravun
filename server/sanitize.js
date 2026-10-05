@@ -150,6 +150,10 @@ export function sanitizeSettings(s) {
   for (const k of SETTINGS_FLAGS) if (typeof src[k] === 'boolean') out[k] = src[k]
   if ('instagramUrl' in src) out.instagramUrl = safeUrl(src.instagramUrl, 'https://instagram.com/')
   if ('giftPrice' in src) out.giftPrice = safeNumber(src.giftPrice, 0, 0, 100000)
+  if ('googleVerifyFile' in src) {
+    const f = String(src.googleVerifyFile || '').trim()
+    out.googleVerifyFile = /^google[a-z0-9]{6,64}\.html$/.test(f) ? f : ''
+  }
   if ('returnDays' in src) out.returnDays = Math.round(safeNumber(src.returnDays, 14, 14, 365))
   // Kategori listesi (sıralı; "Tümü" hariç). Aynı anahtara düşen adlar tekilleştirilir.
   if (Array.isArray(src.categories)) {

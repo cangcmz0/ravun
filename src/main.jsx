@@ -640,14 +640,28 @@ function metaDescriptionFor(page, product) {
   if (page === 'track') return 'Ravun siparişinizin durumunu sipariş numaranız ve telefonunuzla takip edin.';
   return 'Ravun — ahşap, epoksi ve el yapımı premium tasarım atölyesi.';
 }
+// Ürün sayfasındaki sık sorulan sorular; aynı liste Google'a FAQ verisi olarak da gider.
+function productFaqs(product, settings) {
+  const days = Number(settings?.returnDays) || 14;
+  return [
+    ['Teslim süresi nedir?', `${product.delivery || '2–3 hafta'} içinde üretim ve paketleme tamamlanır. Özel ölçü taleplerinde süre değişebilir.`],
+    ['Ahşap damarları fotoğraftakiyle aynı mı olur?', 'Doğal ahşapta her damar farklıdır; ton ve akış fotoğraftakine yakın olur ama her parça kendine özgüdür.'],
+    ['Kişiselleştirme yapılır mı?', 'Ölçü, epoksi tonu ve kullanım amacına göre WhatsApp üzerinden özel sipariş konuşulabilir.'],
+    ['İade edebilir miyim?', `Teslimden itibaren ${days} gün içinde cayma hakkınızı kullanabilirsiniz. Ölçü, renk veya isim gibi size özel üretilen parçalar yasal olarak cayma hakkının dışındadır.`],
+    ['Ödeme nasıl yapılır?', 'Siparişiniz bize ulaştıktan sonra sizinle iletişime geçer, ödeme ve teslim bilgilerini birlikte netleştiririz. Sipariş aşamasında ödeme alınmaz.']
+  ];
+}
 function structuredDataFor(page, product, extra = {}) {
+  const s = extra.settings || {};
   const org = {
     '@context':'https://schema.org',
     '@type':'Organization',
     name:'Ravun',
     url:absoluteUrl('/'),
     logo:absoluteUrl('/assets/ravun-logo.webp'),
-    sameAs:['https://instagram.com/ravun.atolye']
+    sameAs:[s.instagramUrl || 'https://instagram.com/ravun.atolye'],
+    contactPoint:{'@type':'ContactPoint', contactType:'customer service', telephone:s.sellerPhone || WA_DISPLAY, email:s.sellerEmail || WA_EMAIL, availableLanguage:'Turkish'},
+    address:{'@type':'PostalAddress', addressCountry:'TR', ...(s.sellerAddress ? {streetAddress:s.sellerAddress} : {addressLocality:'Beykoz', addressRegion:'İstanbul'})}
   };
   if (page === 'product' && product) {
     const status = productStatusInfo(product);
@@ -692,6 +706,10 @@ function structuredDataFor(page, product, extra = {}) {
         {'@type':'ListItem', position:2, name:'Koleksiyon', item:absoluteUrl(pagePath('collection'))},
         {'@type':'ListItem', position:3, name:product.title, item:absoluteUrl(pagePath('product', product))}
       ]
+    }, {
+      '@context':'https://schema.org',
+      '@type':'FAQPage',
+      mainEntity:productFaqs(product, s).map(([q,a])=>({'@type':'Question', name:q, acceptedAnswer:{'@type':'Answer', text:a}}))
     }];
   }
   return [org, {
@@ -1417,7 +1435,7 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
             </div>
           </div>
         </div>
-        <ProductDetails product={product}/>
+        <ProductDetails product={product} settings={settings}/>
         <section id="yorumlar" className="pdxReviews reveal" aria-label="Müşteri yorumları">
           <div className="pdxHead"><p>YORUMLAR</p><h2>Bu parça hakkında söylenenler</h2></div>
           <ReviewSection productId={product.id} allReviews={allReviews} setAllReviews={setAllReviews}/>
@@ -1457,7 +1475,7 @@ function ProductDetailPage({product, go, add, allReviews, setAllReviews, favorit
    hikayesi" kartında, sertifika kartında ve "atölye bilgisi" kartlarında
    üç dört kez tekrar ediyordu. Artık tek bölüm: solda hikaye + özellik
    listesi, sağda bakım / kargo / sık sorulanlar akordeonu. */
-function ProductDetails({product}){
+function ProductDetails({product, settings}){
   const longText = product.longDesc || product.desc;
   const story = product.story && product.story !== longText ? product.story : '';
   const specs = [
@@ -1470,11 +1488,7 @@ function ProductDetails({product}){
     // Parça no ve tekrar durumu yandaki "Parça kimliği" kartında
   ].filter(([,v])=>v);
   const careTips = (product.careTips && product.careTips.length) ? product.careTips : defaultCareTips(product);
-  const faqs=[
-    ['Teslim süresi nedir?', `${product.delivery || '2–3 hafta'} içinde üretim ve paketleme tamamlanır. Özel ölçü taleplerinde süre değişebilir.`],
-    ['Ahşap damarları fotoğraftakiyle aynı mı olur?', 'Doğal ahşapta her damar farklıdır; ton ve akış fotoğraftakine yakın olur ama her parça kendine özgüdür.'],
-    ['Kişiselleştirme yapılır mı?', 'Ölçü, epoksi tonu ve kullanım amacına göre WhatsApp üzerinden özel sipariş konuşulabilir.']
-  ];
+  const faqs=productFaqs(product, settings);
   return (
     <section className="pdxDetails reveal" aria-label="Ürün hakkında">
       <div className="pdxStory">
@@ -1843,6 +1857,29 @@ function formatMsgDate(iso) {
   } catch { return iso; }
 }
 /* ── İLETİŞİM ── */
+/* İletişim bilgileri: telefon, e-posta ve haritada açılan adres. */
+function ContactFacts({settings}){
+  const phone=settings?.sellerPhone||WA_DISPLAY;
+  const email=settings?.sellerEmail||WA_EMAIL;
+  const address=settings?.sellerAddress||settings?.footerLocation||'Beykoz, İstanbul';
+  const mapUrl=`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(settings?.sellerAddress||`Ravun Atölye ${address}`)}`;
+  return (
+    <ul className="contactFacts">
+      <li><small>Telefon / WhatsApp</small><a href={`tel:+${phone.replace(/\D/g,'')}`}>{phone}</a></li>
+      <li><small>E-posta</small><a href={`mailto:${email}`}>{email}</a></li>
+      <li><small>Atölye</small><span>{address}</span><a className="contactMap" href={mapUrl} target="_blank" rel="noopener noreferrer">Haritada aç ↗</a></li>
+    </ul>
+  );
+}
+/* Masaüstünde sağ altta sabit WhatsApp düğmesi (mobilde alt menüde zaten var). */
+function FloatingWhatsApp({page}){
+  if(page==='account') return null;
+  return (
+    <a className="waFloat" href={`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent('Merhaba, Ravun ürünleri hakkında bilgi almak istiyorum.')}`} target="_blank" rel="noopener noreferrer" aria-label="WhatsApp'tan yazın">
+      <IWA/><span>Sorunuz mu var?</span>
+    </a>
+  );
+}
 function ContactPage({settings}){return <main className="page"><Contact settings={settings}/></main>;}
 function Contact({settings}){
   const EMPTY = {isim:'',eposta:'',telefon:'',parca:'',mesaj:''};
@@ -1921,6 +1958,7 @@ function Contact({settings}){
         <p className="pill">İLETİŞİM</p>
         <h2>Hayalinizdeki parçayı<br/><em>birlikte tasarlayalım.</em></h2>
         <span>Formu doldurun ya da doğrudan bize yazın. Her mesaja en geç 48 saat içinde yanıt veriyoruz.</span>
+        <ContactFacts settings={settings}/>
         {sent ? (
           <div className="formSent">
             <span>✓</span>
@@ -3145,6 +3183,7 @@ function App(){
       <BottomNav page={page} go={go} onSearch={()=>setSearchOpen(true)} onCart={()=>setDrawer(true)} favCount={favorites.length} cartCount={cart.reduce((s,x)=>s+x.qty,0)}/>
       {toast&&<div className={`toast ${drawer?'toastTop':''}`} role="status">✓ {toast}</div>}
       <CookieNotice go={go}/>
+      <FloatingWhatsApp page={page}/>
     </>
   );
 }

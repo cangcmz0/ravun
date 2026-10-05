@@ -7151,3 +7151,19 @@ html body .cx .cxDiscount b{font-weight:800;letter-spacing:.04em}
 html body .cx .cxCouponRemove{border:0;background:none;padding:0 0 0 8px;font:600 12px/1 var(--sans);color:var(--text-muted);text-decoration:underline;cursor:pointer}
 html body .trkDiscount{color:var(--emerald-mid);font-size:14px}
 html body .cx .cxDiscount span:last-child{white-space:nowrap;font-weight:700}
+
+/* ── İletişim bilgileri ── */
+html body .contactFacts{list-style:none;margin:18px 0 6px;padding:0;display:grid;gap:10px}
+html body .contactFacts li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:10px 0;border-bottom:1px solid var(--rule-soft,rgba(0,0,0,.08))}
+html body .contactFacts small{flex:0 0 140px;font:700 11px/1.4 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--text-muted)}
+html body .contactFacts a,html body .contactFacts span{font:500 15px/1.4 var(--sans);color:var(--text-main);text-decoration:none}
+html body .contactFacts a:hover{color:var(--emerald-mid)}
+html body .contactFacts .contactMap{font-size:13px;font-weight:700;color:var(--emerald-mid)}
+@media (max-width:560px){html body .contactFacts small{flex-basis:100%}}
+
+/* ── Sabit WhatsApp düğmesi (masaüstü) ── */
+html body .waFloat{position:fixed;right:22px;bottom:22px;z-index:120;display:none;align-items:center;gap:10px;padding:12px 18px 12px 14px;border-radius:999px;background:#1f6f5c;color:#fff;font:700 14px/1 var(--sans);text-decoration:none;box-shadow:0 16px 34px -14px rgba(20,40,30,.6);transition:transform .2s,box-shadow .2s}
+html body .waFloat svg{width:22px;height:22px}
+html body .waFloat:hover{transform:translateY(-2px);box-shadow:0 20px 40px -14px rgba(20,40,30,.7)}
+@media (min-width:901px){html body .waFloat{display:inline-flex}}
+@media (min-width:901px){html body .cookieNote ~ .waFloat{bottom:96px}}
